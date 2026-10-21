@@ -770,21 +770,36 @@ fn generate_catalyst_alternatives(slots: &mut HashMap<String, SlotResolution>, w
     }
 }
 
-/// Build a Void Forge variant of a source item: same item_id, swapped bonus_id,
-/// recomputed ilevel and simc_string, tag and upgrade fields refreshed from the
-/// VF bonus entry so the UI can distinguish it from the base item.
-pub fn build_void_forge_item(source: &ResolvedItem, vf_bonus_id: u64) -> ResolvedItem {
-    // Replace the matching base bonus_id with the VF variant.
+/// Build a Void Forge variant of a source item, or None if it can't be forged:
+/// same item_id, a 6/6 track bonus swapped for its VF bonus (or, for max-quality
+/// crafted weapons, the crafted VF bonus appended), recomputed ilevel and
+/// simc_string, tag and upgrade fields refreshed from the VF bonus entry so the
+/// UI can distinguish it from the base item.
+pub fn build_void_forge_item(source: &ResolvedItem) -> Option<ResolvedItem> {
     let vf_map = item_db::void_forge_map();
-    let mut new_bonus_ids: Vec<u64> = source
-        .bonus_ids
-        .iter()
-        .map(|b| vf_map.get(b).copied().unwrap_or(*b))
-        .collect();
+    let mut ilevel = source.ilevel;
+    let (mut new_bonus_ids, vf_bonus_id) =
+        match source.bonus_ids.iter().find_map(|b| vf_map.get(b).copied()) {
+            // Replace the matching base bonus_id with the VF variant.
+            Some(vf) => {
+                let ids: Vec<u64> = source
+                    .bonus_ids
+                    .iter()
+                    .map(|b| vf_map.get(b).copied().unwrap_or(*b))
+                    .collect();
+                (ids, vf)
+            }
+            None => {
+                let (vf, gain) = crafted_void_forge(source)?;
+                ilevel += gain;
+                let mut ids = source.bonus_ids.clone();
+                ids.push(vf);
+                (ids, vf)
+            }
+        };
     new_bonus_ids.sort();
 
     // Recompute ilvl + tag + upgrade from the VF bonus entry.
-    let mut ilevel = source.ilevel;
     let mut tag = source.tag.clone();
     let mut upgrade = source.upgrade.clone();
     if let Some(vf_value) = item_db::bonuses().get(&vf_bonus_id) {
@@ -833,7 +848,7 @@ pub fn build_void_forge_item(source: &ResolvedItem, vf_bonus_id: u64) -> Resolve
         source.slot
     );
 
-    ResolvedItem {
+    Some(ResolvedItem {
         uid,
         bonus_ids: new_bonus_ids,
         ilevel,
@@ -845,18 +860,29 @@ pub fn build_void_forge_item(source: &ResolvedItem, vf_bonus_id: u64) -> Resolve
         can_void_forge: false,
         // Everything else copied from source — same item, just upgraded
         ..source.clone()
-    }
+    })
 }
 
-/// Mark weapons and trinkets that have a Void Forge map key as `can_void_forge = true`.
+/// Slots Void Forge applies to: weapons, trinkets and the necklace.
+const VF_SLOTS: &[&str] = &["main_hand", "off_hand", "trinket1", "trinket2", "neck"];
+
+/// Crafted Void Forge (bonus_id, ilvl gain): max-quality crafted weapons only.
+fn crafted_void_forge(item: &ResolvedItem) -> Option<(u64, u64)> {
+    if !matches!(item.slot.as_str(), "main_hand" | "off_hand") {
+        return None;
+    }
+    item_db::crafted_void_forge(&item.bonus_ids)
+}
+
+/// Whether `build_void_forge_item` would forge this item (6/6 track or max-quality crafted).
+fn void_forgeable(item: &ResolvedItem) -> bool {
+    let vf_map = item_db::void_forge_map();
+    item.bonus_ids.iter().any(|b| vf_map.contains_key(b)) || crafted_void_forge(item).is_some()
+}
+
+/// Mark Void Forge slot items that can be forged as `can_void_forge = true`.
 /// This drives the per-item "Convert to Void Forge" button visibility on the frontend.
 pub fn mark_void_forge_eligible(slots: &mut HashMap<String, SlotResolution>) {
-    const VF_SLOTS: &[&str] = &["main_hand", "off_hand", "trinket1", "trinket2"];
-    let vf_map = item_db::void_forge_map();
-    if vf_map.is_empty() {
-        return;
-    }
-
     let mark = |item: &mut ResolvedItem| {
         if item.is_void_forge {
             return;
@@ -864,7 +890,7 @@ pub fn mark_void_forge_eligible(slots: &mut HashMap<String, SlotResolution>) {
         if !VF_SLOTS.contains(&item.slot.as_str()) {
             return;
         }
-        if item.bonus_ids.iter().any(|b| vf_map.contains_key(b)) {
+        if void_forgeable(item) {
             item.can_void_forge = true;
         }
     };
@@ -879,15 +905,9 @@ pub fn mark_void_forge_eligible(slots: &mut HashMap<String, SlotResolution>) {
     }
 }
 
-/// Generate Void Forge variants for weapons and trinkets whose bonus_ids
-/// contain a VF map key. Appends to each slot's alternatives.
+/// Generate Void Forge variants for every forgeable item in the Void Forge
+/// slots. Appends to each slot's alternatives.
 pub fn generate_void_forge_alternatives(slots: &mut HashMap<String, SlotResolution>) {
-    const VF_SLOTS: &[&str] = &["main_hand", "off_hand", "trinket1", "trinket2"];
-    let vf_map = item_db::void_forge_map();
-    if vf_map.is_empty() {
-        return;
-    }
-
     for slot_name in VF_SLOTS {
         let Some(slot_res) = slots.get_mut(*slot_name) else {
             continue;
@@ -900,11 +920,7 @@ pub fn generate_void_forge_alternatives(slots: &mut HashMap<String, SlotResoluti
             if item.is_void_forge || item.is_catalyst {
                 return;
             }
-            // Find the first VF-mapped bonus_id on this item.
-            let Some(vf_target) = item.bonus_ids.iter().find_map(|b| vf_map.get(b).copied()) else {
-                return;
-            };
-            additions.push(build_void_forge_item(item, vf_target));
+            additions.extend(build_void_forge_item(item));
         };
 
         if let Some(eq) = slot_res.equipped.as_ref() {
@@ -1405,5 +1421,57 @@ mod manual_item_tests {
             alt.is_some(),
             "manual copy must resolve with an identical uid"
         );
+    }
+}
+
+#[cfg(test)]
+mod void_forge_tests {
+    use super::*;
+    use crate::test_support::ensure_game_data_loaded;
+
+    fn resolve(profile_gear: &str) -> ResolveGearResponse {
+        let profile = format!("warrior=\"T\"\nlevel=90\nspec=fury\n\n{profile_gear}\n");
+        resolve_gear(&crate::addon_parser::parse_simc_input(&profile))
+    }
+
+    // Tidal Crafted (13751) Myth crest (13836) at quality rank 5 (12497).
+    const MAX_CRAFTED: &str = "12214/13751/13836/12497";
+
+    #[test]
+    fn max_quality_crafted_weapon_is_forged_by_appending_the_bonus() {
+        ensure_game_data_loaded();
+        let mut resolved = resolve(&format!(
+            "# Spellbreaker's Blade (331)
+main_hand=,id=237839,bonus_id={MAX_CRAFTED}"
+        ));
+        let mh = resolved.slots["main_hand"].equipped.as_ref().unwrap();
+        assert!(mh.can_void_forge);
+        assert_eq!(mh.ilevel, 331);
+
+        generate_void_forge_alternatives(&mut resolved.slots);
+        let vf = resolved.slots["main_hand"]
+            .alternatives
+            .iter()
+            .find(|a| a.is_void_forge)
+            .expect("void forged weapon");
+        let (vf_bonus, _) = item_db::crafted_void_forge_bonus().unwrap();
+        assert_eq!(vf.ilevel, 338);
+        assert!(vf.bonus_ids.contains(&vf_bonus) && vf.bonus_ids.contains(&13836));
+        assert!(vf.simc_string.contains(&vf_bonus.to_string()));
+    }
+
+    #[test]
+    fn crafted_neck_and_lower_quality_weapon_are_not_forgeable() {
+        ensure_game_data_loaded();
+        let resolved = resolve(&format!(
+            "# Masterwork Sin'dorei Amulet (331)
+neck=,id=240950,bonus_id={MAX_CRAFTED}
+             # Spellbreaker's Blade (322)
+main_hand=,id=237839,bonus_id=12214/13751/13836/12496"
+        ));
+        for slot in ["neck", "main_hand"] {
+            let item = resolved.slots[slot].equipped.as_ref().unwrap();
+            assert!(!item.can_void_forge, "{slot} must not be forgeable");
+        }
     }
 }

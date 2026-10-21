@@ -574,13 +574,13 @@ pub fn get_instance_drops(
 
 // ---- Drop Variants (opt-in, Drop Finder only) ----
 
-/// Inventory types eligible for Void Forge: trinket + weapons + off-hand
-/// (matches gear-resolver VF_SLOTS: main_hand/off_hand/trinkets). Derived from
-/// the canonical inv-type classifier so it can't drift from the slot mapping.
+/// Inventory types eligible for Void Forge: weapons, off-hand, trinket, neck
+/// (matches gear-resolver VF_SLOTS). Derived from the canonical inv-type
+/// classifier so it can't drift from the slot mapping.
 fn is_void_forge_inv_type(inv_type: u64) -> bool {
     matches!(
         class_data::inventory_type_display_slot(inv_type),
-        "Main Hand" | "Off Hand" | "Trinket"
+        "Main Hand" | "Off Hand" | "Trinket" | "Neck"
     )
 }
 
@@ -610,15 +610,72 @@ fn void_forge_info_map(info: &Value) -> Option<serde_json::Map<String, Value>> {
     }
 }
 
+/// Crafted Void Forge info map: only the crafted difficulties (all max quality),
+/// each keeping its bonus with the ilvl raised by `gain`. The VF bonus itself
+/// rides along in `extra_bonus_ids`. Returns None if the resulting map is empty.
+fn crafted_void_forge_info_map(info: &Value, gain: u64) -> Option<serde_json::Map<String, Value>> {
+    let keys: Vec<String> = item_db::season_cfg()
+        .get("dungeonCategories")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|c| {
+            serde_json::from_value::<crate::types::season::DungeonCategory>(c.clone()).ok()
+        })
+        .find(|c| c.key == "crafted")
+        .map(|c| c.difficulties.into_iter().map(|d| d.key).collect())
+        .unwrap_or_default();
+    let mut out = serde_json::Map::new();
+    for (diff, entry) in info.as_object()? {
+        if !keys.contains(diff) {
+            continue;
+        }
+        let ilvl = entry.get("ilvl").and_then(|v| v.as_u64());
+        let bonus = entry.get("bonus_id").and_then(|v| v.as_u64());
+        if let (Some(ilvl), Some(bonus)) = (ilvl, bonus) {
+            out.insert(
+                diff.clone(),
+                serde_json::json!({ "ilvl": ilvl + gain, "bonus_id": bonus, "quality": 4 }),
+            );
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 /// Build a Void Forged variant of a drop item, or None if it can't be void forged.
 fn build_void_forge_variant(item: &Value) -> Option<Value> {
-    let diff_info = item.get("difficulty_info").and_then(void_forge_info_map);
-    let dungeon_info = item.get("dungeon_info").and_then(void_forge_info_map);
+    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
+    // Crafted gear has no 6/6 track bonus to swap; only crafted weapons can be
+    // forged, and they get the crafted VF bonus.
+    let crafted = match item_db::is_crafted_item(item_id) {
+        true => {
+            let inv_type = item
+                .get("inventory_type")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if !matches!(
+                class_data::inventory_type_display_slot(inv_type),
+                "Main Hand" | "Off Hand"
+            ) {
+                return None;
+            }
+            Some(item_db::crafted_void_forge_bonus()?)
+        }
+        false => None,
+    };
+    let info_map = |info: &Value| match crafted {
+        Some((_, gain)) => crafted_void_forge_info_map(info, gain),
+        None => void_forge_info_map(info),
+    };
+    let diff_info = item.get("difficulty_info").and_then(info_map);
+    let dungeon_info = item.get("dungeon_info").and_then(info_map);
     if diff_info.is_none() && dungeon_info.is_none() {
         return None;
     }
-
-    let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
 
     // Top-level ilevel = max vf ilvl across the variant maps.
     let max_ilvl = [diff_info.as_ref(), dungeon_info.as_ref()]
@@ -642,6 +699,9 @@ fn build_void_forge_variant(item: &Value) -> Option<Value> {
         Some(m) => obj.insert("dungeon_info".to_string(), Value::Object(m)),
         None => obj.remove("dungeon_info"),
     };
+    if let Some((vf_bonus, _)) = crafted {
+        obj.insert("extra_bonus_ids".to_string(), serde_json::json!([vf_bonus]));
+    }
     Some(variant)
 }
 
@@ -717,7 +777,7 @@ fn build_catalyst_variant(item: &Value, class_id: u64, inv_type: u64) -> Option<
     Some(variant)
 }
 
-/// Append opt-in Void Forged (weapons/trinkets) and/or Catalyst (tier armor)
+/// Append opt-in Void Forged (weapons/trinkets/necks) and/or Catalyst (tier armor)
 /// variant rows to a drops-by-slot map IN PLACE. Both the Drop Finder and roster
 /// runs (via `build_drop_items`) call this; it's a no-op when both flags are
 /// false, so default drops are unchanged.
@@ -1163,6 +1223,36 @@ mod variant_tests {
         assert_eq!(entry["ilvl"].as_u64().unwrap(), vf_ilvl);
         assert!(vf_ilvl > 0, "void-forged ilvl should be > 0");
         assert_eq!(vf["ilevel"].as_u64().unwrap(), vf_ilvl);
+    }
+
+    #[test]
+    fn crafted_void_forge_variant_adds_gain_to_crafted_keys_only() {
+        ensure_game_data_loaded();
+        // Crafted weapon row: crafted-myth plus an unrelated M+ key from the pool.
+        let item = json!({
+            "item_id": 237839,
+            "inventory_type": 13,
+            "dungeon_info": {
+                "crafted-myth": { "ilvl": 331, "bonus_id": 12853, "quality": 4,
+                                  "track": "Myth", "level": 5, "max_level": 6 },
+                "mythic+10": { "ilvl": 321, "bonus_id": 12846, "quality": 4,
+                               "track": "Hero", "level": 6, "max_level": 6 }
+            }
+        });
+        let (vf_bonus, gain) = item_db::crafted_void_forge_bonus().unwrap();
+        let vf = build_void_forge_variant(&item).expect("crafted weapon is forgeable");
+        let info = vf["dungeon_info"].as_object().unwrap();
+        assert_eq!(info.len(), 1, "only crafted difficulties: {info:?}");
+        assert_eq!(info["crafted-myth"]["ilvl"], json!(331 + gain));
+        assert_eq!(info["crafted-myth"]["bonus_id"], json!(12853));
+        assert_eq!(vf["extra_bonus_ids"], json!([vf_bonus]));
+        assert_eq!(vf["ilevel"], json!(331 + gain));
+
+        // Crafted necks and trinkets are not forgeable.
+        let mut neck = item.clone();
+        neck["item_id"] = json!(240950);
+        neck["inventory_type"] = json!(2);
+        assert!(build_void_forge_variant(&neck).is_none());
     }
 
     #[test]
