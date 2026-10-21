@@ -1067,6 +1067,67 @@ main_hand=,id=200\n";
         );
     }
 
+    // Regression: an unselected bag ring with an empty socket made finger1 a gem
+    // slot, and the selected gem then overwrote the equipped ring's gem even with
+    // replace_gems off. Only the added head socket may receive the gem.
+    #[test]
+    fn top_gear_keeps_equipped_gem_when_an_unselected_alt_has_an_empty_socket() {
+        ensure_game_data_loaded();
+        let base_profile = "\
+mage=test\n\
+spec=frost\n\
+head=,id=300\n\
+finger1=,id=400,gem_id=213453\n\
+main_hand=,id=200\n";
+
+        let item = |slot: &str, id: u64, simc: &str, equipped: bool, bonus: &[u64], gem: u64| {
+            json!({
+                "slot": slot, "simc_string": simc, "is_equipped": equipped,
+                "origin": if equipped { "equipped" } else { "bags" },
+                "item_id": id, "ilevel": 0, "name": "", "bonus_ids": bonus,
+                "enchant_id": 0, "gem_id": gem, "sockets": 1,
+            })
+        };
+        let mut equipped_head = item("head", 300, ",id=300", true, &[], 0);
+        equipped_head["sockets"] = json!(0);
+        let socketed_head = item("head", 300, ",id=300,bonus_id=8781", false, &[8781], 0);
+        let equipped_ring = item("finger1", 400, ",id=400,gem_id=213453", true, &[], 213453);
+        let bag_ring = item("finger1", 401, ",id=401", false, &[], 0);
+
+        let mut items_by_slot = HashMap::new();
+        items_by_slot.insert("head".to_string(), vec![equipped_head, socketed_head]);
+        items_by_slot.insert("finger1".to_string(), vec![equipped_ring, bag_ring]);
+        let mut selected = HashMap::new();
+        selected.insert("head".to_string(), vec!["300:8781:bags:head".to_string()]);
+
+        let gems = [213454_u64];
+        let sockets = HashSet::from([300_u64, 400_u64, 401_u64]);
+        let (input, combo_count, _) = generate_top_gear_input_with_variants(
+            base_profile,
+            &items_by_slot,
+            &selected,
+            Some(50),
+            &[],
+            None,
+            &GemEnchantOptions {
+                gem_options: &gems,
+                socketed_item_ids: Some(&sockets),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(
+            !input.contains("finger1=,id=400,gem_id=213454"),
+            "equipped ring gem was replaced:\n{input}"
+        );
+        assert!(
+            input.contains("head=,id=300,gem_id=213454,bonus_id=8781"),
+            "added head socket was not filled:\n{input}"
+        );
+        assert_eq!(combo_count, 1, "only the socketed head combo:\n{input}");
+    }
+
     // Regression: the returned combo_count must match the number of "### Combo"
     // blocks in the generated input. Was broken when the function returned the
     // upper-bound estimate instead of the actual emit count.

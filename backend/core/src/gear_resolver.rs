@@ -133,14 +133,13 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
     let resolved = item_db::resolve_bonuses(&item.bonus_ids);
     let season_id = resolved.season_id.unwrap_or(0);
 
-    let (name, icon, quality, tag, upgrade, sockets, db_ilevel) = if let Some(ref info) = info {
+    let (name, icon, quality, tag, upgrade, db_ilevel) = if let Some(ref info) = info {
         (
             info.name.clone(),
             info.icon.clone(),
             info.quality,
             info.tag.clone(),
             info.upgrade.clone(),
-            info.sockets,
             info.ilevel,
         )
     } else {
@@ -155,10 +154,11 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
             resolved.quality.unwrap_or(1),
             resolved.tag.unwrap_or_default(),
             resolved.upgrade.unwrap_or_default(),
-            resolved.sockets.unwrap_or(0),
             resolved.ilevel.unwrap_or(0),
         )
     };
+    // Base + bonus sockets: bonus-only under-counts items that ship with one.
+    let sockets = item_db::item_socket_count(item.item_id, &item.bonus_ids);
 
     // When bonuses resolved an upgrade track or ilevel override, use the DB value
     // (handles upgrade sim). Otherwise prefer parsed ilevel from addon (game client truth).
@@ -1289,6 +1289,21 @@ mod gem_ids_tests {
             .expect("equipped neck");
         assert_eq!(equipped.gem_ids, vec![213470, 213473]);
         assert_eq!(equipped.gem_id, 213470);
+    }
+
+    #[test]
+    fn enrich_counts_base_sockets_on_top_of_bonus_sockets() {
+        ensure_game_data_loaded();
+        // 268265 has a base socket plus one from bonus 13668: two in-game. Counting
+        // only the bonus socket let Top Gear drop the second gem.
+        let profile = "druid=\"T\"\nlevel=80\nspec=feral\n\nneck=,id=268265,gem_id=240967/240898,bonus_id=6652/13668/13334/13987/12854\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear(&parsed);
+        let equipped = resolved.slots["neck"]
+            .equipped
+            .as_ref()
+            .expect("equipped neck");
+        assert_eq!(equipped.sockets, 2);
     }
 }
 
