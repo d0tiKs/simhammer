@@ -4,9 +4,18 @@ import { useRouter } from 'next/navigation';
 import { memo, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { simRow } from '../../lib/api';
-import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
+import {
+  localizedEnchantName,
+  localizedGemName,
+  toGemIdList,
+  type EnchantInfo,
+  type GemInfo,
+  type ItemInfo,
+} from '../../lib/useItemInfo';
+import { SLOT_LABELS } from '../../lib/types';
+import { buildBestGearSet } from './topGearResultsUtils';
 import { useLanguage } from '../../lib/i18n';
-import type { TopGearResult } from './topGearResultsTypes';
+import type { ResultItem, TopGearResult } from './topGearResultsTypes';
 import ComboSummary from './ComboSummary';
 import Pill from '../ui/Pill';
 
@@ -98,6 +107,7 @@ function PrecisionDot({ pct, targetError }: { pct: number; targetError?: number 
  *  encounter summary, so a row reads the same wherever it is shown. */
 export const ResultRow = memo(function ResultRow({
   result,
+  equippedGear,
   rank,
   maxDps,
   baseDps,
@@ -113,6 +123,7 @@ export const ResultRow = memo(function ResultRow({
   sourceJobId,
 }: {
   result: TopGearResult;
+  equippedGear?: Record<string, ResultItem>;
   rank?: number;
   maxDps: number;
   baseDps: number;
@@ -128,9 +139,10 @@ export const ResultRow = memo(function ResultRow({
   /** When present, "Combo N" rows show a "Sim" button re-running the combo as a Quick Sim. */
   sourceJobId?: string;
 }) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const router = useRouter();
   const [verifying, setVerifying] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const barWidth = maxDps > 0 ? (result.dps / maxDps) * 100 : 0;
   const comboId = comboIdFromName(result.name);
   const showVerifyButton = !!sourceJobId && comboId !== null;
@@ -144,17 +156,61 @@ export const ResultRow = memo(function ResultRow({
   const isEquipped =
     (result.items.length === 0 || result.name.startsWith('Currently Equipped')) &&
     enchantGemItems.length === 0;
+  const gearSet = buildBestGearSet(equippedGear ?? {}, result);
+  const detailChanges: string[] = [];
+  const changeMarkers: Record<string, { enchant?: boolean; gem?: boolean; gemId?: number }> = {};
+  if (equippedGear && !result.name.startsWith('Currently Equipped')) {
+    for (const [slot, item] of Object.entries(gearSet)) {
+      const before = equippedGear[slot];
+      if (!before) continue;
+      const slotName = SLOT_LABELS[slot] || slot;
+      if ((item.enchant_id || 0) !== (before.enchant_id || 0)) {
+        changeMarkers[slot] = { ...changeMarkers[slot], enchant: true };
+        const enchant = item.enchant_id && enchantInfoMap[item.enchant_id];
+        detailChanges.push(
+          `${slotName}: ${item.enchant_id ? (enchant ? localizedEnchantName(enchant, locale) : `Enchant #${item.enchant_id}`) : 'Enchant removed'}`
+        );
+      }
+      const gems = toGemIdList(item);
+      if (gems.join(',') !== toGemIdList(before).join(',')) {
+        changeMarkers[slot] = { ...changeMarkers[slot], gem: true, gemId: gems[0] };
+        detailChanges.push(
+          `${slotName}: ${gems.length ? gems.map((id) => (gemInfoMap[id] ? localizedGemName(gemInfoMap[id], locale) : `Gem #${id}`)).join(', ') : 'Gem removed'}`
+        );
+      }
+    }
+  } else if (!equippedGear) {
+    for (const item of enchantGemItems) {
+      changeMarkers[item.slot] = {
+        ...changeMarkers[item.slot],
+        [item.type!]: true,
+        ...(item.type === 'gem' ? { gemId: item.gem_id } : {}),
+      };
+      detailChanges.push(`${SLOT_LABELS[item.slot] || item.slot}: ${item.name || item.type}`);
+    }
+  }
   const changedSlots = new Set(changedItems.map((item) => item.slot));
   const showBothRings = changedSlots.has('finger1') || changedSlots.has('finger2');
   const showBothTrinkets = changedSlots.has('trinket1') || changedSlots.has('trinket2');
 
-  const displayItems = result.items.filter((item) => {
-    if (item.type) return false;
-    if (!item.is_kept) return item.item_id > 0;
-    if (showBothRings && (item.slot === 'finger1' || item.slot === 'finger2')) return true;
-    if (showBothTrinkets && (item.slot === 'trinket1' || item.slot === 'trinket2')) return true;
-    return false;
-  });
+  const displayItems = result.items
+    .filter((item) => {
+      if (item.type) return false;
+      if (!item.is_kept) return item.item_id > 0;
+      if (showBothRings && (item.slot === 'finger1' || item.slot === 'finger2')) return true;
+      if (showBothTrinkets && (item.slot === 'trinket1' || item.slot === 'trinket2')) return true;
+      return false;
+    })
+    .map((item) => {
+      const applied = gearSet[item.slot];
+      return applied && applied.item_id === item.item_id ? { ...item, ...applied } : item;
+    });
+
+  // Enchant-only and gem-only changes still need their equipped item tile.
+  for (const slot of Object.keys(changeMarkers)) {
+    const item = gearSet[slot] || equippedGear?.[slot];
+    if (item && !displayItems.some((entry) => entry.slot === slot)) displayItems.push(item);
+  }
 
   const deltaPct = baseDps > 0 ? (result.delta / baseDps) * 100 : 0;
   const deltaTone =
@@ -173,10 +229,10 @@ export const ResultRow = memo(function ResultRow({
   return (
     <div
       onClick={() => onSelect?.(result.name)}
-      className={`group relative grid cursor-pointer items-center gap-4 border-b border-line/[0.06] px-6 py-3 transition-colors [contain-intrinsic-size:auto_62px] [content-visibility:auto] last:border-b-0 ${
+      className={`group relative grid cursor-pointer items-start gap-2 border-b border-line/[0.06] px-3 py-2 transition-colors [contain-intrinsic-size:auto_62px] [content-visibility:auto] last:border-b-0 sm:gap-3 sm:px-4 ${
         rank != null
-          ? 'grid-cols-[48px_minmax(0,1fr)_150px_64px]'
-          : 'grid-cols-[minmax(0,1fr)_150px_64px]'
+          ? 'grid-cols-[30px_minmax(0,1fr)_auto] sm:grid-cols-[42px_minmax(0,1fr)_120px]'
+          : 'grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_120px]'
       } ${stateClass}`}
     >
       <div
@@ -202,8 +258,37 @@ export const ResultRow = memo(function ResultRow({
           isEquipped={isEquipped}
           itemInfoMap={itemInfoMap}
           gemInfoMap={gemInfoMap}
+          changeMarkers={changeMarkers}
           badge={isBest && <Pill variant="gold">{t('gear.best')}</Pill>}
         />
+        {detailChanges.length > 0 && (
+          <div className="mt-1.5">
+            <button
+              type="button"
+              aria-expanded={detailsOpen}
+              onClick={(event) => {
+                event.stopPropagation();
+                setDetailsOpen(!detailsOpen);
+              }}
+              className="rounded text-xs font-semibold text-gold hover:underline"
+            >
+              {detailsOpen ? 'Hide changes' : `Changes (${detailChanges.length})`}{' '}
+              {detailsOpen ? '▴' : '▾'}
+            </button>
+            {detailsOpen && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {detailChanges.map((detail, i) => (
+                  <span
+                    key={i}
+                    className="rounded bg-gold/10 px-1.5 py-0.5 text-xs text-ench ring-1 ring-gold/40"
+                  >
+                    {detail}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="relative text-right">
@@ -226,65 +311,60 @@ export const ResultRow = memo(function ResultRow({
             </span>
           )}
         </div>
-      </div>
-
-      <div
-        className={`relative flex items-center justify-end gap-1 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 ${
-          isCompareTarget ? '' : 'opacity-0'
-        }`}
-      >
-        {onCompare && !isEquipped && (
-          <button
-            type="button"
-            onClick={(e: MouseEvent) => {
-              e.stopPropagation();
-              onCompare(result.name);
-            }}
-            title={t('gear.compareRowTitle')}
-            aria-label={t('gear.compareRowTitle')}
-            className={`${ROW_ACTION} ${isCompareTarget ? '!border-info/40 !text-info' : 'hover:text-info'}`}
-          >
-            <svg
-              className="h-3.5 w-3.5"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+        <div className="relative mt-1 flex items-center justify-end gap-1">
+          {onCompare && !isEquipped && (
+            <button
+              type="button"
+              onClick={(e: MouseEvent) => {
+                e.stopPropagation();
+                onCompare(result.name);
+              }}
+              title={t('gear.compareRowTitle')}
+              aria-label={t('gear.compareRowTitle')}
+              className={`${ROW_ACTION} ${isCompareTarget ? '!border-info/40 !text-info' : 'hover:text-info'}`}
             >
-              <path d="M5 3v10M11 3v10M2 6l3-3 3 3M8 10l3 3 3-3" />
-            </svg>
-          </button>
-        )}
-        {showVerifyButton && (
-          <button
-            type="button"
-            onClick={async (e: MouseEvent) => {
-              e.stopPropagation();
-              if (!sourceJobId || comboId == null || verifying) return;
-              setVerifying(true);
-              try {
-                const newId = await simRow(sourceJobId, comboId);
-                router.push(`/sim/${newId}`);
-              } catch {
-                setVerifying(false);
-              }
-            }}
-            disabled={verifying}
-            title={t('gear.verifyRowTitle')}
-            aria-label={t('gear.verifyRowTitle')}
-            className={`${ROW_ACTION} hover:text-on-surface`}
-          >
-            {verifying ? (
-              '…'
-            ) : (
-              <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M5 3l8 5-8 5z" />
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 3v10M11 3v10M2 6l3-3 3 3M8 10l3 3 3-3" />
               </svg>
-            )}
-          </button>
-        )}
+            </button>
+          )}
+          {showVerifyButton && (
+            <button
+              type="button"
+              onClick={async (e: MouseEvent) => {
+                e.stopPropagation();
+                if (!sourceJobId || comboId == null || verifying) return;
+                setVerifying(true);
+                try {
+                  const newId = await simRow(sourceJobId, comboId);
+                  router.push(`/sim/${newId}`);
+                } catch {
+                  setVerifying(false);
+                }
+              }}
+              disabled={verifying}
+              title={t('gear.verifyRowTitle')}
+              aria-label={t('gear.verifyRowTitle')}
+              className={`${ROW_ACTION} hover:text-on-surface`}
+            >
+              {verifying ? (
+                '…'
+              ) : (
+                <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M5 3l8 5-8 5z" />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { SLOT_LABELS } from '../../lib/types';
 import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
-import type { GroupMode, TopGearResult } from './topGearResultsTypes';
+import type { GroupMode, TopGearResult, ResultItem } from './topGearResultsTypes';
 import { ResultRow } from './ResultRow';
 import CardHeader from '../ui/CardHeader';
 import ToggleButtonGroup from '../ui/ToggleButtonGroup';
@@ -18,6 +18,7 @@ const VISIBLE_STEP = 50;
 
 interface TopGearRankingsProps {
   results: TopGearResult[];
+  equippedGear?: Record<string, ResultItem>;
   maxDps: number;
   baseDps: number;
   /** Configured target_error (%), shown in the per-row precision tooltip. */
@@ -38,6 +39,7 @@ interface TopGearRankingsProps {
 
 export default function TopGearRankings({
   results,
+  equippedGear,
   maxDps,
   baseDps,
   targetError,
@@ -126,6 +128,7 @@ export default function TopGearRankings({
                     <ResultRow
                       key={result.name}
                       result={result}
+                      equippedGear={equippedGear}
                       maxDps={maxDps}
                       baseDps={baseDps}
                       isBest={result === results[0] && result.delta > 0}
@@ -147,6 +150,7 @@ export default function TopGearRankings({
         </div>
       ) : (
         <RankedResults
+          equippedGear={equippedGear}
           results={results}
           maxDps={maxDps}
           baseDps={baseDps}
@@ -167,6 +171,7 @@ export default function TopGearRankings({
 
 function RankedResults({
   results,
+  equippedGear,
   maxDps,
   baseDps,
   targetError,
@@ -180,6 +185,7 @@ function RankedResults({
   sourceJobId,
 }: {
   results: TopGearResult[];
+  equippedGear?: Record<string, ResultItem>;
   maxDps: number;
   baseDps: number;
   targetError?: number;
@@ -192,7 +198,9 @@ function RankedResults({
   onCompareResult: (name: string) => void;
   sourceJobId?: string;
 }) {
+  const { t } = useLanguage();
   const [visibleCount, setVisibleCount] = useState(VISIBLE_STEP);
+  const [precisionLimit, setPrecisionLimit] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   // Newly revealed rows mount fresh wowhead anchors after the info maps have
   // settled, so the map-keyed refresh in TopGearResults never re-fires for them.
@@ -217,16 +225,77 @@ function RankedResults({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [results, visibleCount]);
+  }, [results, visibleCount, precisionLimit]);
 
-  const visible = results.slice(0, visibleCount);
+  const filtered = results
+    .map((result, index) => ({ result, index }))
+    .filter(
+      ({ result }) =>
+        precisionLimit === 0 ||
+        (result.precision_pct != null && result.precision_pct <= precisionLimit)
+    );
+  const visible = filtered.slice(0, visibleCount);
+  const baselineIndex = results.findIndex(
+    (result) => result.name.startsWith('Currently Equipped') && result.delta === 0
+  );
+  const baseline = results[baselineIndex];
 
   return (
     <div>
-      {visible.map((result, idx) => (
+      {baseline && (
+        <div className="border-b border-line/20 bg-shade/20">
+          <div className="px-6 pt-3 text-xs font-semibold text-outline">
+            {t('topGear.baseline')}
+          </div>
+          <ResultRow
+            result={baseline}
+            equippedGear={equippedGear}
+            rank={baselineIndex + 1}
+            maxDps={maxDps}
+            baseDps={baseDps}
+            targetError={targetError}
+            isBest={baselineIndex === 0 && baseline.delta > 0}
+            isSelected={baseline.name === (selectedResultName || results[0]?.name)}
+            onSelect={onSelectResult}
+            isCompareTarget={baseline.name === compareResultName}
+            onCompare={onCompareResult}
+            itemInfoMap={itemInfoMap}
+            enchantInfoMap={enchantInfoMap}
+            gemInfoMap={gemInfoMap}
+            sourceJobId={sourceJobId}
+          />
+        </div>
+      )}
+      <label className="flex flex-wrap items-center gap-2 px-6 py-3 text-sm text-on-surface">
+        Precision
+        <select
+          value={precisionLimit}
+          onChange={(event) => {
+            setPrecisionLimit(Number(event.target.value));
+            setVisibleCount(VISIBLE_STEP);
+          }}
+          className="rounded border border-line bg-surface px-2 py-1 text-on-surface"
+        >
+          <option value={0}>All results</option>
+          {[0.5, 1, 2, 4].map((limit) => (
+            <option key={limit} value={limit}>
+              ±{limit}% or better
+            </option>
+          ))}
+        </select>
+        <span className="text-outline" aria-live="polite" aria-atomic="true">
+          {filtered.length.toLocaleString()} matching {filtered.length === 1 ? 'result' : 'results'}{' '}
+          of {results.length.toLocaleString()}
+        </span>
+      </label>
+      {filtered.length === 0 && (
+        <p className="px-6 pb-4 text-sm text-outline">No results match this precision filter.</p>
+      )}
+      {visible.map(({ result, index: idx }) => (
         <ResultRow
           key={result.name}
           result={result}
+          equippedGear={equippedGear}
           rank={idx + 1}
           maxDps={maxDps}
           baseDps={baseDps}
@@ -242,7 +311,7 @@ function RankedResults({
           sourceJobId={sourceJobId}
         />
       ))}
-      {visibleCount < results.length && <div ref={sentinelRef} className="h-px" />}
+      {visibleCount < filtered.length && <div ref={sentinelRef} className="h-px" />}
     </div>
   );
 }

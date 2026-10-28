@@ -17,6 +17,7 @@ import {
 
 interface GearOverviewProps {
   gear: Record<string, GearItem>;
+  baselineGear?: Record<string, GearItem>;
   title?: string;
   characterRenderUrl?: string | null;
   upgradeSlots?: Set<string>;
@@ -32,6 +33,7 @@ export type { GearItem } from './gearOverviewTypes';
 
 export default function GearOverview({
   gear,
+  baselineGear,
   title,
   characterRenderUrl,
   upgradeSlots,
@@ -57,7 +59,7 @@ export default function GearOverview({
 
   // minmax(0,…): a long gem/enchant line truncates instead of pushing the right column out.
   const gridCols = characterRenderUrl
-    ? 'grid-cols-[minmax(0,1fr)_clamp(180px,27%,300px)_minmax(0,1fr)]'
+    ? 'grid-cols-2 md:grid-cols-[minmax(0,1fr)_clamp(180px,27%,300px)_minmax(0,1fr)]'
     : 'grid-cols-2';
   const avgIlvl = averageItemLevel(gear);
 
@@ -74,10 +76,10 @@ export default function GearOverview({
           )
         }
       />
-      <div className="relative overflow-hidden px-6 py-[22px]">
+      <div className="relative overflow-hidden px-3 py-3 sm:px-6 sm:py-4">
         {characterRenderUrl && (render.status === 'trimmed' || render.status === 'full') && (
           // Spotlight: warm key light behind the character, contact shadow at the feet.
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[380px] -translate-x-1/2">
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-[380px] -translate-x-1/2 md:block">
             <div className="spotlight-glow absolute -inset-x-[20%] -top-[10%] bottom-0 bg-[radial-gradient(ellipse_42%_55%_at_50%_38%,rgb(var(--c-gold-light)/0.16),rgb(var(--c-gold-light)/0.05)_45%,transparent_70%)]" />
             <div className="absolute bottom-[2.5%] left-1/2 h-[34px] w-[220px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0.75),transparent_70%)]" />
             {render.status === 'trimmed' ? (
@@ -101,12 +103,13 @@ export default function GearOverview({
           </div>
         )}
         <div className={`relative grid items-start gap-2 ${gridCols}`}>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-0.5">
             {GEAR_ORDER_LEFT.map((slot) => (
               <GearSlotRow
                 key={slot}
                 slot={slot}
                 item={gear[slot]}
+                baselineItem={baselineGear?.[slot]}
                 isUpgrade={upgradeSlots?.has(slot)}
                 isDowngrade={downgradeSlots?.has(slot)}
                 isShared={sharedSlots?.has(slot)}
@@ -116,13 +119,14 @@ export default function GearOverview({
               />
             ))}
           </div>
-          {characterRenderUrl && <div />}
-          <div className="flex flex-col gap-1.5">
+          {characterRenderUrl && <div className="hidden md:block" />}
+          <div className="flex flex-col gap-0.5">
             {GEAR_ORDER_RIGHT.map((slot) => (
               <GearSlotRow
                 key={slot}
                 slot={slot}
                 item={gear[slot]}
+                baselineItem={baselineGear?.[slot]}
                 isUpgrade={upgradeSlots?.has(slot)}
                 isDowngrade={downgradeSlots?.has(slot)}
                 isShared={sharedSlots?.has(slot)}
@@ -134,13 +138,14 @@ export default function GearOverview({
             ))}
           </div>
         </div>
-        <div className={`relative mt-1.5 grid gap-2 ${gridCols}`}>
+        <div className={`relative mt-1 grid gap-2 ${gridCols}`}>
           {GEAR_ORDER_BOTTOM.map((slot, index) => (
             <Fragment key={slot}>
-              {index === 1 && characterRenderUrl && <div />}
+              {index === 1 && characterRenderUrl && <div className="hidden md:block" />}
               <GearSlotRow
                 slot={slot}
                 item={gear[slot]}
+                baselineItem={baselineGear?.[slot]}
                 isUpgrade={upgradeSlots?.has(slot)}
                 isDowngrade={downgradeSlots?.has(slot)}
                 isShared={sharedSlots?.has(slot)}

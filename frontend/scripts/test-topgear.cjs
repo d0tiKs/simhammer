@@ -222,6 +222,22 @@ const {
   buildBestGearSet,
 } = require('../src/app/components/gear/topGearResultsUtils.ts');
 
+test('Wowhead tooltip uses a combination’s enchant and all socket gems', () => {
+  const equipped = { finger1: { slot: 'finger1', item_id: 10, ilevel: 300, name: 'Ring', enchant_id: 1, gem_ids: [21, 22] } };
+  const result = { name: 'Combo 1', dps: 100, delta: 1, items: [
+    { ...equipped.finger1, is_kept: true },
+    { slot: 'finger1', type: 'enchant', enchant_id: 7 },
+    { slot: 'finger1', type: 'gem', gem_id: 31 },
+    { slot: 'finger1', type: 'gem', gem_id: 32 },
+  ] };
+  const item = buildBestGearSet(equipped, result).finger1;
+  const params = new URLSearchParams(getWowheadData(item));
+  assert.equal(params.get('ench'), '7');
+  assert.equal(params.get('gems'), '31:32');
+  assert.equal(params.get('ilvl'), '300');
+  assert.deepEqual(equipped.finger1.gem_ids, [21, 22]);
+});
+
 let nextItemId = 1;
 /** A result for a distinct item, unless `itemId` pins it to an existing one. */
 const res = (encounter, delta, { precision, itemId, slot = 'head' } = {}) => {

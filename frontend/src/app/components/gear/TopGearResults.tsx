@@ -172,6 +172,7 @@ export default function TopGearResults({
         ) : (
           <GearOverview
             gear={bestGearSet}
+            baselineGear={equippedGear}
             title={
               selectedResultName && selectedResultName !== bestResult?.name
                 ? t('gear.selectedGear')
@@ -205,6 +206,7 @@ export default function TopGearResults({
       )}
 
       <TopGearRankings
+        equippedGear={equippedGear}
         results={activeResults}
         maxDps={maxDps}
         baseDps={baseDps}
@@ -312,6 +314,7 @@ function CompareOverview({
       <div className="grid gap-4 lg:grid-cols-2">
         <GearOverview
           gear={selectedGearSet}
+          baselineGear={equippedGear}
           title={selectedResult.name}
           upgradeSlots={selectedWins ? selectedDiffSlots : undefined}
           downgradeSlots={selectedWins ? undefined : selectedDiffSlots}
@@ -322,6 +325,7 @@ function CompareOverview({
         />
         <GearOverview
           gear={compareGearSet}
+          baselineGear={equippedGear}
           title={compareResult.name}
           upgradeSlots={selectedWins ? undefined : compareDiffSlots}
           downgradeSlots={selectedWins ? compareDiffSlots : undefined}

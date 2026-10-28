@@ -19,7 +19,8 @@ import { useConsumableLookup } from '../sim-config/ConsumablePickers';
 import type { ResultItem, TopGearResult } from './topGearResultsTypes';
 
 const MAX_TILES = 6;
-const TILE = 'relative block h-[34px] w-[34px] shrink-0 overflow-hidden rounded-[6px] border';
+const TILE =
+  'relative block h-[28px] w-[28px] sm:h-[34px] sm:w-[34px] shrink-0 overflow-hidden rounded-[6px] border';
 
 /** Corner marker on an item tile: catalyst, Void Forged. */
 function Corner({ className }: { className: string }) {
@@ -60,7 +61,19 @@ function GlyphTile({
   );
 }
 
-function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; locale: string }) {
+function ItemTile({
+  item,
+  info,
+  locale,
+  marker,
+  gemInfoMap,
+}: {
+  item: ResultItem;
+  info?: ItemInfo;
+  locale: string;
+  marker?: { enchant?: boolean; gem?: boolean; gemId?: number };
+  gemInfoMap: Record<number, GemInfo>;
+}) {
   const color = info ? QUALITY_COLORS[info.quality] || QUALITY_COLORS[1] : QUALITY_COLORS[1];
   const href = item.item_id > 0 ? getWowheadUrl(item.item_id, locale) : undefined;
   return (
@@ -70,7 +83,7 @@ function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; l
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.preventDefault()}
-      className={cn(TILE, item.is_kept && 'opacity-40')}
+      className={cn(TILE, item.is_kept && !marker && 'opacity-40')}
       style={{ borderColor: color }}
     >
       <img
@@ -82,6 +95,28 @@ function ItemTile({ item, info, locale }: { item: ResultItem; info?: ItemInfo; l
         loading="lazy"
       />
       <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]" />
+      {marker?.enchant && (
+        <span
+          title="Enchant changed"
+          aria-label="Enchant changed"
+          className="absolute bottom-0 left-0 grid h-4 w-4 place-items-center rounded-tr bg-black/90 text-[12px] font-bold leading-none text-ench ring-1 ring-gold"
+        >
+          ✦
+        </span>
+      )}
+      {marker?.gem && (
+        <span
+          title="Gem changed"
+          aria-label="Gem changed"
+          className="absolute bottom-0 right-0 grid h-4 w-4 place-items-center rounded-tl bg-black/90 text-[11px] leading-none text-gem ring-1 ring-gold"
+        >
+          {marker.gemId && gemInfoMap[marker.gemId] ? (
+            <img {...iconProps(gemInfoMap[marker.gemId].icon)} alt="" className="h-full w-full" />
+          ) : (
+            '◆'
+          )}
+        </span>
+      )}
       {item.is_catalyst && <Corner className="bg-info" />}
       {item.is_void_forge && <Corner className="bg-quality-epic" />}
       {!!item.upgrade_levels && (
@@ -102,6 +137,7 @@ interface ComboSummaryProps {
   isEquipped: boolean;
   itemInfoMap: Record<number, ItemInfo>;
   gemInfoMap: Record<number, GemInfo>;
+  changeMarkers: Record<string, { enchant?: boolean; gem?: boolean; gemId?: number }>;
   badge?: ReactNode;
 }
 
@@ -114,6 +150,7 @@ export default function ComboSummary({
   isEquipped,
   itemInfoMap,
   gemInfoMap,
+  changeMarkers,
   badge,
 }: ComboSummaryProps) {
   const { t, locale } = useLanguage();
@@ -131,30 +168,40 @@ export default function ComboSummary({
     : '';
 
   const tiles: ReactNode[] = [];
-  displayItems.forEach((item, i) =>
-    tiles.push(
-      <ItemTile
-        key={`i${i}`}
-        item={item}
-        info={item.item_id > 0 ? itemInfoMap[item.item_id] : undefined}
-        locale={locale}
-      />
-    )
-  );
-  enchantGemItems.forEach((item, i) => {
-    const gem = item.type === 'gem' && item.gem_id ? gemInfoMap[item.gem_id] : undefined;
-    tiles.push(
-      gem ? (
-        <span key={`g${i}`} title={item.name} className={cn(TILE, 'border-line/15')}>
-          <img {...iconProps(gem.icon)} alt="" className="h-full w-full" loading="lazy" />
-        </span>
-      ) : (
-        <GlyphTile key={`e${i}`} title={item.name || t('gear.enchant')} tone="bg-ench/10 text-ench">
-          <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" />
-        </GlyphTile>
+  [...displayItems]
+    .sort((a, b) => Number(!!changeMarkers[b.slot]) - Number(!!changeMarkers[a.slot]))
+    .forEach((item, i) =>
+      tiles.push(
+        <ItemTile
+          key={`i${i}`}
+          item={item}
+          info={item.item_id > 0 ? itemInfoMap[item.item_id] : undefined}
+          locale={locale}
+          marker={changeMarkers[item.slot]}
+          gemInfoMap={gemInfoMap}
+        />
       )
     );
-  });
+  enchantGemItems
+    .filter((item) => !displayItems.some((gear) => gear.slot === item.slot))
+    .forEach((item, i) => {
+      const gem = item.type === 'gem' && item.gem_id ? gemInfoMap[item.gem_id] : undefined;
+      tiles.push(
+        gem ? (
+          <span key={`g${i}`} title={item.name} className={cn(TILE, 'border-line/15')}>
+            <img {...iconProps(gem.icon)} alt="" className="h-full w-full" loading="lazy" />
+          </span>
+        ) : (
+          <GlyphTile
+            key={`e${i}`}
+            title={item.name || t('gear.enchant')}
+            tone="bg-ench/10 text-ench"
+          >
+            <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" />
+          </GlyphTile>
+        )
+      );
+    });
   if (talents)
     tiles.push(
       <GlyphTile key="talents" title={talents} tone="bg-quality-epic/10 text-quality-epic">
@@ -182,7 +229,6 @@ export default function ComboSummary({
   const labels: { text: string; className: string }[] = [
     ...(talents ? [{ text: talents, className: 'text-quality-epic' }] : []),
     ...(result.folio_build ? [{ text: result.folio_build, className: 'text-info' }] : []),
-    ...enchantGemItems.map((item) => ({ text: item.name ?? '', className: 'text-ench' })),
     ...consumables.map((c) => ({ text: c.name, className: 'text-on-surface-variant' })),
   ];
 
@@ -227,8 +273,8 @@ export default function ComboSummary({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-3.5">
-      <div className="flex shrink-0 gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+      <div className="flex flex-wrap gap-1">
         {tiles.slice(0, MAX_TILES)}
         {tiles.length > MAX_TILES && (
           <span
@@ -238,6 +284,11 @@ export default function ComboSummary({
             )}
           >
             +{tiles.length - MAX_TILES}
+            {Object.keys(changeMarkers).length > 0 && (
+              <span aria-label="Enchant or gem changes" className="text-gold">
+                ✦
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -257,7 +308,7 @@ export default function ComboSummary({
           {badge}
         </div>
         {parts.length > 0 && (
-          <div className="mt-0.5 truncate text-xs text-outline">
+          <div className="mt-0.5 break-words text-xs leading-tight text-outline">
             {parts.map((part, i) => (
               <span key={i}>
                 {i > 0 && ' · '}
