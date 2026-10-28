@@ -3,6 +3,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollWhileVisible } from '../../lib/usePollWhileVisible';
+import CopySimcInputButton from '../../components/results/CopySimcInputButton';
 import SimResultView from '../../components/results/SimResultView';
 import SimStatus from '../../components/results/SimStatus';
 import ShareButton from '../../components/share/ShareButton';
@@ -252,7 +253,8 @@ export default function SimResultClient() {
             {job.error || t('results.unknownError')}
           </p>
         </div>
-        <div className="flex items-center justify-center text-[11px] uppercase tracking-wider text-on-surface-variant/40">
+        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] uppercase tracking-wider text-on-surface-variant/40">
+          <CopySimcInputButton jobId={id} />
           <a
             href={`${API_URL}/api/sim/${id}/input`}
             target="_blank"
@@ -336,7 +338,8 @@ export default function SimResultClient() {
             liveExpected={job.provider_id === 'local'}
           />
         )}
-        <div className="flex items-center justify-center text-[11px] uppercase tracking-wider text-on-surface-variant/40">
+        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] uppercase tracking-wider text-on-surface-variant/40">
+          <CopySimcInputButton jobId={id} />
           <a
             href={`${API_URL}/api/sim/${id}/input`}
             target="_blank"
@@ -428,12 +431,15 @@ export default function SimResultClient() {
           ) : undefined
         }
         actions={
-          <ShareButton
-            jobId={id}
-            result={r}
-            shareId={job.share_id ?? null}
-            onChange={(shareId) => setJob((cur) => (cur ? { ...cur, share_id: shareId } : cur))}
-          />
+          <>
+            <CopySimcInputButton jobId={id} />
+            <ShareButton
+              jobId={id}
+              result={r}
+              shareId={job.share_id ?? null}
+              onChange={(shareId) => setJob((cur) => (cur ? { ...cur, share_id: shareId } : cur))}
+            />
+          </>
         }
       />
 
