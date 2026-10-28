@@ -120,7 +120,7 @@ export default function DpsHeroCard({
 
       {showCharacter && characterRenderUrl && (
         <div
-          className="pointer-events-none absolute -bottom-8 right-0 top-[60px] z-[1] w-[42%]"
+          className="pointer-events-none absolute -bottom-16 -right-3 top-3 z-[1] w-[54%]"
           aria-label={`${playerName}'s current Armory appearance`}
         >
           <img
