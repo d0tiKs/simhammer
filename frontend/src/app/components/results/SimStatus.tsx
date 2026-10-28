@@ -147,12 +147,24 @@ export default function SimStatus({
   const overallRefinement = batch && (
     <section
       aria-label="Overall refinement progress"
-      className="mb-4 rounded border border-line/10 px-4 py-3"
+      className="relative mb-4 w-full overflow-hidden rounded-[10px] border border-line/[0.06] px-7 py-4 [box-shadow:var(--shadow-card)]"
+      style={{
+        background:
+          'radial-gradient(ellipse 40% 80% at 10% 0%,rgb(var(--c-primary-fill) / .07),transparent 70%),linear-gradient(180deg,rgb(var(--c-surface-container-high)),rgb(var(--c-surface-container)))',
+      }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-on-surface">
-        <span>Overall refinement</span>
-        <span className="font-mono tabular-nums">
-          {batch.completed} / {batch.total} completed · {batch.percent}%
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2.5 font-headline text-xs font-extrabold uppercase tracking-[0.14em] text-gold">
+            <span className="h-[7px] w-[7px] rounded-full bg-gold-fill shadow-[0_0_0_4px_rgb(var(--c-primary-fill)/0.15)]" />
+            Overall refinement
+          </div>
+          <p className="mt-1.5 text-xs text-on-surface-variant">
+            {batch.completed} / {batch.total} runs completed
+          </p>
+        </div>
+        <span className="font-headline text-[26px] font-extrabold tabular-nums text-on-surface">
+          {batch.percent}%
         </span>
       </div>
       <div
@@ -162,14 +174,14 @@ export default function SimStatus({
         aria-valuemax={batch.total}
         aria-valuenow={batch.completed}
         aria-valuetext={`${batch.completed} of ${batch.total} runs completed`}
-        className="mt-2 h-2 overflow-hidden rounded-full bg-surface-container-highest"
+        className="mt-3 h-1.5 overflow-hidden rounded-[6px] bg-surface-container-highest"
       >
         <div
-          className="h-full rounded-full bg-gold-fill transition-[width] duration-300"
+          className="h-full rounded-[6px] bg-gradient-to-r from-gold-dark to-gold-fill transition-[width] duration-300"
           style={{ width: `${batch.percent}%` }}
         />
       </div>
-      <p className="mt-1.5 text-xs text-outline">
+      <p className="mt-2 text-xs text-on-surface-variant/60">
         Running {batch.current} of {batch.total}: {batch.name}
       </p>
     </section>
