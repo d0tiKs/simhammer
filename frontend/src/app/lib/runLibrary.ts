@@ -126,7 +126,7 @@ export function scenarioDifferences(job: JobOverviewSummary, peers: JobOverviewS
     else {
       const on = Object.values(buffs).filter((value) => value === true).length;
       const off = Object.values(buffs).filter((value) => value === false).length;
-      summary.push(`${on} buffs on${off ? ` · ${off} off` : ''}`);
+      summary.push(`${on} ${on === 1 ? 'buff' : 'buffs'} on${off ? ` · ${off} off` : ''}`);
     }
   }
   const consumableDiffs = differing.filter((key) => consumableKeys.has(key));
@@ -148,7 +148,9 @@ export function scenarioDifferences(job: JobOverviewSummary, peers: JobOverviewS
       value === undefined
         ? 'Not recorded'
         : value === null
-          ? 'Off'
+          ? consumableKeys.has(key)
+            ? 'Off'
+            : 'Not recorded'
           : typeof value === 'boolean'
             ? value
               ? 'On'

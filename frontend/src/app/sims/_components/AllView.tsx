@@ -64,11 +64,16 @@ export function AllView({
     return <div className="card p-8 text-center text-outline">No runs match these filters.</div>;
   const groups = groupRuns(jobs, grouped);
   return (
-    <section className="card overflow-hidden px-4 sm:px-6">
+    <section className="space-y-3">
       {groups.map((group) => (
-        <div key={group.key}>
+        <div
+          key={group.key}
+          role="group"
+          aria-label={group.label || 'Recent runs'}
+          className="card overflow-hidden px-4 sm:px-6"
+        >
           {group.label && (
-            <h2 className="border-b border-line/[0.06] py-2.5 text-sm font-semibold text-gold">
+            <h2 className="-mx-4 border-b border-line/[0.1] bg-surface-container-high/60 px-4 py-2.5 text-sm font-semibold text-gold sm:-mx-6 sm:px-6">
               {group.label} <span className="font-normal text-outline">({group.jobs.length})</span>
               {scenarioDifferences(group.jobs[0], jobs) && (
                 <span className="mt-1 block text-xs font-normal text-outline">
