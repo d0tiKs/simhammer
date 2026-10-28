@@ -673,3 +673,16 @@ test('refinement counts rough contenders and widens the cutoff without rerunning
   assert.equal(refinementCandidates(rows, undefined, 0), null);
   assert.equal(refinementCandidates(rows.filter(r => r.precision_pct > 0.1), 0.1, 0), null);
 });
+
+test('automatic refinement uses both error ranges and includes unknown precision', () => {
+  const rows = [
+    { name: 'Combo 1', dps: 110, precision_pct: 1 },
+    { name: 'Combo 2', dps: 108, precision_pct: 0.1 },
+    { name: 'Combo 3', dps: 107, precision_pct: 2 },
+    { name: 'Combo 4', dps: 100, precision_pct: 1 },
+    { name: 'Combo 5', dps: 107.8, precision_pct: 0.11 },
+    { name: 'Combo 6', dps: 90 },
+  ];
+  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'auto').map(r => r.name), ['Combo 1', 'Combo 3', 'Combo 5', 'Combo 6']);
+  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'custom').map(r => r.name), ['Combo 1']);
+});

@@ -12,12 +12,23 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-#[derive(Deserialize)]
-pub(super) struct RefineRequest {
-    pub margin_pct: f64,
+#[derive(Clone, Copy, Default, Deserialize, serde::Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum SelectionMode {
+    Auto,
+    #[default]
+    Custom,
 }
 
-fn candidates(result: &Value, margin: f64) -> Result<Vec<String>, String> {
+#[derive(Deserialize)]
+pub(super) struct RefineRequest {
+    #[serde(default)]
+    pub margin_pct: f64,
+    #[serde(default)]
+    mode: SelectionMode,
+}
+
+fn candidates(result: &Value, margin: f64, mode: SelectionMode) -> Result<Vec<String>, String> {
     if !margin.is_finite() || !(0.0..=10.0).contains(&margin) {
         return Err("Margin must be between 0 and 10 percent".into());
     }
@@ -40,14 +51,30 @@ fn candidates(result: &Value, margin: f64) -> Result<Vec<String>, String> {
         .filter_map(|r| r["dps"].as_f64())
         .reduce(f64::max)
         .ok_or("No full-precision result is available")?;
+    let reference_error = rows
+        .iter()
+        .find(|r| precise(r) && r["dps"].as_f64() == Some(best))
+        .and_then(|r| r["precision_pct"].as_f64())
+        .unwrap_or(0.0);
+    let reference_lower = best * (1.0 - reference_error / 100.0);
     let cutoff = best * (1.0 - margin / 100.0);
     Ok(rows
         .iter()
         .filter(|r| !precise(r))
         .filter(|r| {
-            r["dps"]
-                .as_f64()
-                .is_some_and(|d| if margin == 0.0 { d > best } else { d >= cutoff })
+            r["dps"].as_f64().is_some_and(|d| {
+                if mode == SelectionMode::Auto {
+                    // Missing uncertainty is conservatively included.
+                    r["precision_pct"]
+                        .as_f64()
+                        .filter(|p| *p >= 0.0)
+                        .is_none_or(|p| d * (1.0 + p / 100.0) >= reference_lower)
+                } else if margin == 0.0 {
+                    d > best
+                } else {
+                    d >= cutoff
+                }
+            })
         })
         .filter_map(|r| r["name"].as_str())
         .filter(|n| n.starts_with("Combo "))
@@ -78,6 +105,7 @@ fn merge_result(
     updates: &[(String, Value)],
     source_id: &str,
     margin: f64,
+    mode: SelectionMode,
 ) -> Result<Value, String> {
     let mut result = source.clone();
     let base = source["base_dps"].as_f64().ok_or("Missing baseline DPS")?;
@@ -118,7 +146,7 @@ fn merge_result(
             .unwrap_or(0.0)
             .total_cmp(&a["dps"].as_f64().unwrap_or(0.0))
     });
-    result["refinement"] = json!({"source_id":source_id,"margin_pct":margin,"target_error":target,"combinations":updates.iter().map(|(name,_)| name).collect::<Vec<_>>()});
+    result["refinement"] = json!({"source_id":source_id,"mode":mode,"margin_pct":margin,"target_error":target,"combinations":updates.iter().map(|(name,_)| name).collect::<Vec<_>>()});
     Ok(result)
 }
 
@@ -147,7 +175,7 @@ pub(super) async fn refine(
         Some(v) => v,
         None => return fail("Source result is missing".into()),
     };
-    let names = match candidates(&original, req.margin_pct) {
+    let names = match candidates(&original, req.margin_pct, req.mode) {
         Ok(n) if !n.is_empty() => n,
         Ok(_) => return fail("No combinations match this margin".into()),
         Err(e) => return fail(e),
@@ -247,6 +275,7 @@ pub(super) async fn refine(
     let logs = logs.get_ref().clone();
     let queue = queue.get_ref().clone();
     let margin = req.margin_pct;
+    let mode = req.mode;
     tokio::spawn(async move {
         let _temp = temp;
         let token = crate::cancel::CancelToken::new(repo.clone(), &task_id);
@@ -267,7 +296,7 @@ pub(super) async fn refine(
                 if parsed["simc_git_revision"] != original["simc_git_revision"] { return Err("SimC revision differs from the source. Restore the original engine before refining.".into()); }
                 updates.push((name.clone(),parsed));
             }
-            let merged = merge_result(&original,&updates,&source_id,margin)?;
+            let merged = merge_result(&original,&updates,&source_id,margin,mode)?;
             if token.is_cancelled().await { return Err("Cancelled".into()); }
             repo.set_result(&task_id,&merged.to_string(),None).await.map_err(|e| e.to_string())?;
             Ok::<(),String>(())
@@ -310,12 +339,15 @@ mod tests {
     }
     #[test]
     fn margin_selects_only_rough_contenders() {
-        assert_eq!(candidates(&source(), 0.0).unwrap(), vec!["Combo 1"]);
         assert_eq!(
-            candidates(&source(), 1.0).unwrap(),
+            candidates(&source(), 0.0, SelectionMode::Custom).unwrap(),
+            vec!["Combo 1"]
+        );
+        assert_eq!(
+            candidates(&source(), 1.0, SelectionMode::Custom).unwrap(),
             vec!["Combo 1", "Combo 3"]
         );
-        assert!(candidates(&source(), -1.0).is_err());
+        assert!(candidates(&source(), -1.0, SelectionMode::Custom).is_err());
     }
     #[test]
     fn copy_replaces_numbers_and_keeps_source_and_gear() {
@@ -328,12 +360,40 @@ mod tests {
             )],
             "source",
             0.0,
+            SelectionMode::Custom,
         )
         .unwrap();
         assert_eq!(r["results"][0]["name"], "Combo 2");
         assert_eq!(r["results"][2]["delta"], 5.0);
         assert_eq!(r["results"][2]["items"], json!([1]));
         assert_eq!(s["results"][0]["dps"], 110.0);
+    }
+    #[test]
+    fn selection_mode_is_explicit_and_legacy_requests_still_work() {
+        let old: RefineRequest = serde_json::from_value(json!({"margin_pct":0})).unwrap();
+        assert!(old.mode == SelectionMode::Custom);
+        let auto: RefineRequest = serde_json::from_value(json!({"mode":"auto"})).unwrap();
+        assert!(auto.mode == SelectionMode::Auto);
+        assert!(serde_json::from_value::<RefineRequest>(json!({"mode":"unknown"})).is_err());
+        let merged = merge_result(&source(), &[], "source", 0.0, SelectionMode::Auto).unwrap();
+        assert_eq!(merged["refinement"]["mode"], "auto");
+    }
+    #[test]
+    fn auto_uses_each_error_range_and_reference_uncertainty() {
+        let mut s = source();
+        s["results"].as_array_mut().unwrap().extend([
+            json!({"name":"Combo 4","dps":100.0,"precision_pct":1.0}),
+            json!({"name":"Combo 5","dps":107.8,"precision_pct":0.11}),
+            json!({"name":"Combo 6","dps":90.0}),
+        ]);
+        assert_eq!(
+            candidates(&s, 0.0, SelectionMode::Auto).unwrap(),
+            vec!["Combo 1", "Combo 3", "Combo 5", "Combo 6"]
+        );
+        assert!(candidates(&s, 0.0, SelectionMode::Auto)
+            .unwrap()
+            .iter()
+            .all(|n| n != "Combo 2"));
     }
     #[test]
     fn incompatible_engine_rejected() {
@@ -344,7 +404,8 @@ mod tests {
                 json!({"dps":105.0,"dps_error_pct":0.1,"simc_git_revision":"other"})
             )],
             "source",
-            0.0
+            0.0,
+            SelectionMode::Custom,
         )
         .is_err());
     }

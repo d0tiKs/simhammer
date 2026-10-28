@@ -1,12 +1,19 @@
 # Local Top Gear refinement
 
-The rankings offer a margin below the highest result whose stored error meets the
+The rankings default to Auto selection: a rough result is included when its
+upper error bound reaches the lower error bound of the highest-DPS precise
+result. Results with unknown precision are included conservatively. This can
+select many more combinations, so the count is shown before starting.
+
+Custom selection offers a margin below the highest result whose stored error meets the
 report's target error. A margin of zero selects only rough combinations with a
 higher estimated DPS. Wider margins include additional rough contenders. The UI
 shows the candidate count before submission. Selection ignores the precision
 visibility filter and uses the complete report.
 
-`POST /api/sim/{id}/refine` accepts `{"margin_pct": 0}`. Only completed Top Gear
+`POST /api/sim/{id}/refine` accepts `{"mode":"auto"}` or
+`{"mode":"custom","margin_pct":0}`. Requests without `mode` retain the original
+custom-margin behavior. Copied reports record which mode was used. Only completed Top Gear
 jobs are supported. The operation runs through the local simulation queue, with
 progress and cancellation available through the normal job endpoints. Closing
 the browser does not stop it.
@@ -46,8 +53,10 @@ matching also cannot establish that every external data source stayed identical.
 
 ## Removing the feature
 
-This feature is isolated in one Git commit. Revert that commit and rebuild the
-server and frontend to remove it while retaining the earlier UI customizations.
+Base refinement and the Auto option are separate local commits. Revert the Auto
+commit to remove only automatic selection. To remove refinement entirely, revert
+the Auto commit and then the base refinement commit. Rebuild the server and
+frontend after reverting, retaining the earlier UI customizations.
 Existing copied reports contain ordinary gear-result data and remain readable.
 The deployed local service mounts a compiled server and exported frontend; a Git
 revert alone does not replace those running artifacts.
