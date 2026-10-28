@@ -106,25 +106,61 @@ export function scenarioDifferences(job: JobOverviewSummary, peers: JobOverviewS
   const current = flatten(job),
     others = sameLabel.map(flatten);
   const keys = [...new Set(others.flatMap(Object.keys))];
-  return keys
-    .filter(
-      (key) =>
-        new Set(others.map((value) => JSON.stringify(canonical(value[key] ?? null)))).size > 1
-    )
-    .map((key) => {
-      const value = current[key];
-      const label = key.replaceAll('_', ' ');
-      const display =
-        value == null
-          ? 'None'
+  const differing = keys.filter(
+    (key) =>
+      new Set(others.map((value) => JSON.stringify(canonical(value[key] ?? '__unknown__')))).size >
+      1
+  );
+  const buffs = job.scenario?.settings.raid_buffs as Record<string, boolean> | undefined;
+  const buffKeys = new Set(
+    others
+      .flatMap((value) => Object.keys(value))
+      .filter((key) =>
+        sameLabel.some((j) => key in ((j.scenario?.settings.raid_buffs ?? {}) as object))
+      )
+  );
+  const consumableKeys = new Set(['flask', 'potion', 'food', 'augmentation', 'weapon_rune']);
+  const summary: string[] = [];
+  if (differing.some((key) => buffKeys.has(key))) {
+    if (!buffs) summary.push('Buffs not recorded');
+    else {
+      const on = Object.values(buffs).filter((value) => value === true).length;
+      const off = Object.values(buffs).filter((value) => value === false).length;
+      summary.push(`${on} buffs on${off ? ` · ${off} off` : ''}`);
+    }
+  }
+  const consumableDiffs = differing.filter((key) => consumableKeys.has(key));
+  const groupedConsumables = consumableDiffs.length >= 3;
+  if (groupedConsumables) {
+    const values = Object.values(
+      (job.scenario?.settings.consumables ?? {}) as Record<string, unknown>
+    );
+    const on = values.filter(Boolean).length;
+    summary.push(
+      values.length ? (on ? `${on} consumables on` : 'Consumables off') : 'Consumables not recorded'
+    );
+  }
+  for (const key of differing) {
+    if (buffKeys.has(key) || (groupedConsumables && consumableKeys.has(key))) continue;
+    const value = current[key];
+    const label = key.replaceAll('_', ' ');
+    const display =
+      value === undefined
+        ? 'Not recorded'
+        : value === null
+          ? 'Off'
           : typeof value === 'boolean'
             ? value
               ? 'On'
               : 'Off'
             : typeof value === 'object'
-              ? ((value as { name?: string }).name ?? 'Custom settings')
+              ? ((value as { name?: string }).name ??
+                (value as { value?: string }).value ??
+                'Custom')
               : String(value);
-      return `${label.charAt(0).toUpperCase() + label.slice(1)}: ${display}`;
-    })
-    .join(' · ');
+    summary.push(`${label.charAt(0).toUpperCase() + label.slice(1)}: ${display}`);
+  }
+  return summary.length > 3
+    ? `${summary.slice(0, 3).join(' · ')} · +${summary.length - 3} settings`
+    : summary.join(' · ');
 }

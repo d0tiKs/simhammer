@@ -87,6 +87,7 @@ fn job_to_overview_summary(
     j: &Job,
     s: crate::models::ResultSummary,
 ) -> crate::models::JobOverviewSummary {
+    let scenario = crate::overview_context::extract(&j.request_json, &j.result_json);
     crate::models::JobOverviewSummary {
         id: j.id.clone(),
         status: j.status.clone(),
@@ -97,7 +98,10 @@ fn job_to_overview_summary(
         progress_detail: j.progress_detail.clone(),
         player_name: s.player_name,
         player_class: s.player_class,
-        fight_style: j.fight_style.clone(),
+        fight_style: scenario["fight_style"]
+            .as_str()
+            .unwrap_or(&j.fight_style)
+            .to_string(),
         simc_input_mode: j.simc_input_mode,
         pause_requested: j.pause_requested,
         error_message: j.error_message.clone(),
@@ -109,7 +113,7 @@ fn job_to_overview_summary(
         precise_error_pct: s.precise_error_pct,
         batch_id: j.batch_id.clone(),
         provider_id: j.provider_id.clone(),
-        scenario: crate::overview_context::extract(&j.request_json, &j.result_json),
+        scenario,
     }
 }
 
@@ -174,13 +178,19 @@ fn row_to_overview_summary(
     };
     let summary = extract_result_summary(&result_json, &simc_input);
     let iterations: i32 = r.try_get("iterations").unwrap_or(0);
+    let scenario = crate::overview_context::extract(
+        &r.try_get::<Option<String>, _>("request_json")
+            .ok()
+            .flatten(),
+        &result_json,
+    );
+    let stored_style: String = r.get("fight_style");
     crate::models::JobOverviewSummary {
-        scenario: crate::overview_context::extract(
-            &r.try_get::<Option<String>, _>("request_json")
-                .ok()
-                .flatten(),
-            &result_json,
-        ),
+        fight_style: scenario["fight_style"]
+            .as_str()
+            .unwrap_or(&stored_style)
+            .to_string(),
+        scenario,
         id: r.get("id"),
         status: str_to_status(&status_str),
         sim_type: r.get("sim_type"),
@@ -190,7 +200,6 @@ fn row_to_overview_summary(
         progress_detail: r.get("progress_detail"),
         player_name: summary.player_name,
         player_class: summary.player_class,
-        fight_style: r.get("fight_style"),
         simc_input_mode: SimcInputMode::from_str(
             &r.try_get::<String, _>("simc_input_mode")
                 .unwrap_or_else(|_| "inline".to_string()),

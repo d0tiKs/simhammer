@@ -267,6 +267,9 @@ export function serializeRoute(
 export type JobStatus = 'pending' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
 export interface RunScenario {
+  fight_style?: string | null;
+  actual_iterations?: number | null;
+  achieved_error_pct?: number | null;
   targets: number | null;
   duration: number | null;
   variation: number | null;

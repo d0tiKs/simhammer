@@ -30,3 +30,11 @@ test('default empty options do not split groups, but food differences stay visib
  assert.equal(scenarioKey(a),scenarioKey(b));
  assert.equal(scenarioDifferences(a,[a,b,c]),'Food: Food A');
 });
+
+test('large environment differences produce short summaries without raw override syntax',()=>{
+ const {scenarioDifferences}=require('../src/app/lib/runLibrary.ts');
+ const a=job('a',{settings:{raid_buffs:{bloodlust:true,skyfury:true},consumables:{flask:{name:'Flask'},potion:{name:'Potion'},food:{name:'Food'}}}});
+ const b=job('b',{settings:{raid_buffs:{bloodlust:false,skyfury:false},consumables:{flask:null,potion:null,food:null}}});
+ assert.equal(scenarioDifferences(a,[a,b]),'2 buffs on · 3 consumables on');
+ assert.equal(scenarioDifferences(b,[a,b]),'0 buffs on · 2 off · Consumables off');
+});

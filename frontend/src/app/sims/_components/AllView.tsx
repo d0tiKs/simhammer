@@ -29,7 +29,7 @@ interface Props {
 function settingValue(value: unknown): string {
   if (value === true) return 'On';
   if (value === false) return 'Off';
-  if (value == null) return 'Not recorded';
+  if (value == null) return 'Off';
   if (typeof value === 'object') {
     const item = value as { name?: string; value?: string };
     if (item.name) return item.name;
@@ -175,7 +175,11 @@ export function AllView({
                       </div>
                       <div>
                         <dt className="inline text-on-surface">Iterations: </dt>
-                        <dd className="inline">{job.iterations.toLocaleString()} maximum</dd>
+                        <dd className="inline">
+                          {scenario?.actual_iterations != null
+                            ? `${scenario.actual_iterations.toLocaleString()} completed`
+                            : `${job.iterations.toLocaleString()} requested`}
+                        </dd>
                       </div>
                       <div>
                         <Link href={`/sim/${job.id}`} className="text-gold hover:underline">
