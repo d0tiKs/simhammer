@@ -59,7 +59,7 @@ export function AllView({
       {groups.map((group) => (
         <div key={group.key}>
           {group.label && (
-            <h2 className="border-b border-line/[0.06] py-4 text-sm font-semibold text-gold">
+            <h2 className="border-b border-line/[0.06] py-2.5 text-sm font-semibold text-gold">
               {group.label} <span className="font-normal text-outline">({group.jobs.length})</span>
               {scenarioDifferences(group.jobs[0], jobs) && (
                 <span className="mt-1 block text-xs font-normal text-outline">
@@ -72,44 +72,51 @@ export function AllView({
             const scenario = job.scenario;
             const gain = gainVsEquipped(job);
             return (
-              <article key={job.id} className="border-b border-line/[0.06] py-4 last:border-0">
+              <article
+                key={job.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-line/[0.06] py-3 last:border-0 md:grid-cols-[minmax(0,1fr)_auto_auto]"
+              >
                 {job.batch_id && job.batch_id !== group.jobs[index - 1]?.batch_id && (
-                  <p className="mb-3 text-xs text-gold">
+                  <p className="col-span-full mb-1 text-xs text-gold">
                     Batch · {SIM_TYPE_LABELS[job.sim_type] ?? job.sim_type}
                   </p>
                 )}
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+                <div className="contents">
                   <div className="min-w-0">
-                    <Link
-                      href={`/sim/${job.id}`}
-                      className="flex items-center gap-2 font-bold text-on-surface hover:text-gold"
-                    >
-                      <StatusDot status={job.status} />
-                      <span className="truncate">{job.player_name || t('sims.simulation')}</span>
-                    </Link>
-                    <div className="mb-2 mt-1">
-                      <Pill variant={SIM_TYPE_PILL[job.sim_type] ?? 'neutral'}>
-                        {SIM_TYPE_LABELS[job.sim_type] ?? job.sim_type}
-                      </Pill>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Link
+                        href={`/sim/${job.id}`}
+                        className="flex items-center gap-2 font-bold text-on-surface hover:text-gold"
+                      >
+                        <StatusDot status={job.status} />
+                        <span className="truncate">{job.player_name || t('sims.simulation')}</span>
+                      </Link>
+                      <div className="leading-none">
+                        <Pill variant={SIM_TYPE_PILL[job.sim_type] ?? 'neutral'}>
+                          {SIM_TYPE_LABELS[job.sim_type] ?? job.sim_type}
+                        </Pill>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                      <span className="text-on-surface">{job.fight_style}</span>
-                      <span className="font-semibold text-gold">{targetLabel(job)}</span>
-                      <span className="text-outline">
-                        {durationLabel(scenario?.duration)}
-                        {scenario?.variation != null
-                          ? ` ±${Math.round(scenario.variation * 100)}%`
-                          : ''}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-outline">{rotationLabel(scenario?.rotation)}</p>
+                    {!grouped && (
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <span className="text-on-surface">{job.fight_style}</span>
+                        <span className="font-semibold text-gold">{targetLabel(job)}</span>
+                        <span className="text-outline">
+                          {durationLabel(scenario?.duration)}
+                          {scenario?.variation != null
+                            ? ` ±${Math.round(scenario.variation * 100)}%`
+                            : ''}
+                        </span>
+                        <span className="text-outline">{rotationLabel(scenario?.rotation)}</span>
+                      </div>
+                    )}
                     {job.error_message && (
                       <p className="mt-1 break-words text-xs text-negative">
                         {job.error_message.slice(0, 160)}
                       </p>
                     )}
                   </div>
-                  <div className="text-right tabular-nums">
+                  <div className="text-right tabular-nums md:flex md:items-baseline md:gap-3">
                     <Link
                       href={`/sim/${job.id}`}
                       className="font-headline text-lg font-extrabold text-on-surface hover:text-gold"
@@ -125,17 +132,19 @@ export function AllView({
                         {gain.toFixed(1)}% vs equipped
                       </p>
                     )}
-                    <p className="mt-1 text-xs text-outline">
+                    <p className="mt-1 text-xs text-outline md:mt-0">
                       {job.precise_dps == null
                         ? job.dps == null
                           ? job.status
                           : 'Estimate'
                         : `±${job.precise_error_pct}% error`}
                     </p>
-                    <p className="mt-1 text-xs text-outline">{timeAgo(job.created_at, t)}</p>
+                    <p className="mt-1 text-xs text-outline md:mt-0">
+                      {timeAgo(job.created_at, t)}
+                    </p>
                   </div>
                 </div>
-                <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
+                <div className="col-span-full flex flex-wrap items-start justify-between gap-3 md:col-span-1 md:items-center md:[&:has(details[open])]:col-span-full">
                   <details className="min-w-0 flex-1 text-xs text-outline">
                     <summary className="w-fit cursor-pointer py-1">Settings</summary>
                     <dl className="mt-2 space-y-1 break-words rounded bg-surface-container-high/50 p-3">

@@ -281,7 +281,7 @@ export default function SimsPage() {
         <label className="flex min-w-0 flex-wrap items-center gap-3 text-sm text-outline">
           Character
           <select
-            className="min-w-0 max-w-full rounded border border-outline/30 bg-surface-container px-3 py-2 text-on-surface"
+            className="sel w-auto min-w-0 max-w-full"
             value={filterCharacter ? characterKey(filterCharacter) : 'all'}
             onChange={(event) =>
               setFilterCharacter(
@@ -311,7 +311,7 @@ export default function SimsPage() {
         <label className="min-w-0 text-xs text-outline">
           Scenario
           <select
-            className="mt-1 w-full rounded border border-outline/30 bg-surface-container px-2 py-2 text-sm text-on-surface"
+            className="sel mt-1 w-full"
             value={scenarioFilter}
             onChange={(e) => setScenarioFilter(e.target.value)}
           >
@@ -326,7 +326,7 @@ export default function SimsPage() {
         <label className="min-w-0 text-xs text-outline">
           Sim type
           <select
-            className="mt-1 w-full rounded border border-outline/30 bg-surface-container px-2 py-2 text-sm text-on-surface"
+            className="sel mt-1 w-full"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >
@@ -341,7 +341,7 @@ export default function SimsPage() {
         <label className="min-w-0 text-xs text-outline">
           Rotation
           <select
-            className="mt-1 w-full rounded border border-outline/30 bg-surface-container px-2 py-2 text-sm text-on-surface"
+            className="sel mt-1 w-full"
             value={rotationFilter}
             onChange={(e) => setRotationFilter(e.target.value)}
           >
