@@ -686,3 +686,19 @@ test('automatic refinement uses both error ranges and includes unknown precision
   assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'auto').map(r => r.name), ['Combo 1', 'Combo 3', 'Combo 5', 'Combo 6']);
   assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'custom').map(r => r.name), ['Combo 1']);
 });
+
+test('probability threshold defaults to 20 percent and updates candidate counts', () => {
+  const { improvementProbability } = require('../src/app/components/gear/refinementCandidates.ts');
+  const rows = [
+    { name: 'Combo 1', dps: 110, precision_pct: 1 },
+    { name: 'Combo 2', dps: 108, precision_pct: 0.1 },
+    { name: 'Combo 3', dps: 107, precision_pct: 3 },
+    { name: 'Combo 4', dps: 100, precision_pct: 1 },
+    { name: 'Combo 5', dps: 90 },
+  ];
+  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'probability').map(r => r.name), ['Combo 1', 'Combo 3']);
+  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'probability', 50).map(r => r.name), ['Combo 1']);
+  assert.equal(refinementCandidates(rows, 0.1, 0, 'probability', 101), null);
+  assert.ok(Math.abs(improvementProbability(100, 1, 100, 1) - 0.5) < 1e-7);
+  assert.equal(improvementProbability(100, 0, 100, 0), 0.5);
+});

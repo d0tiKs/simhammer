@@ -1,6 +1,14 @@
 # Local Top Gear refinement
 
-The rankings default to Auto selection: a rough result is included when its
+The rankings default to Probability selection with a 20% minimum estimated
+chance of beating the best full-precision result. The count updates before any
+simulations start. The screening score uses a normal approximation to the DPS
+difference, with standard errors derived from each reported 95% error margin
+and combined assuming independence. It is not a calibrated probability after
+selection from many combinations. Results without error data are excluded in
+this mode. The user can choose any threshold from 0 to 100%.
+
+Auto error-range selection remains available: a rough result is included when its
 upper error bound reaches the lower error bound of the highest-DPS precise
 result. Results with unknown precision are included conservatively. This can
 select many more combinations, so the count is shown before starting.
@@ -11,7 +19,8 @@ higher estimated DPS. Wider margins include additional rough contenders. The UI
 shows the candidate count before submission. Selection ignores the precision
 visibility filter and uses the complete report.
 
-`POST /api/sim/{id}/refine` accepts `{"mode":"auto"}` or
+`POST /api/sim/{id}/refine` accepts
+`{"mode":"probability","min_probability_pct":20}`, `{"mode":"auto"}`, or
 `{"mode":"custom","margin_pct":0}`. Requests without `mode` retain the original
 custom-margin behavior. Copied reports record which mode was used. Only completed Top Gear
 jobs are supported. The operation runs through the local simulation queue, with
@@ -53,9 +62,10 @@ matching also cannot establish that every external data source stayed identical.
 
 ## Removing the feature
 
-Base refinement and the Auto option are separate local commits. Revert the Auto
-commit to remove only automatic selection. To remove refinement entirely, revert
-the Auto commit and then the base refinement commit. Rebuild the server and
+Base refinement, Auto selection, and Probability selection have separate local
+commits. Revert the latest selection commit to remove only that option. To remove
+refinement entirely, revert its follow-up commits and then the base refinement
+commit. Rebuild the server and
 frontend after reverting, retaining the earlier UI customizations.
 Existing copied reports contain ordinary gear-result data and remain readable.
 The deployed local service mounts a compiled server and exported frontend; a Git

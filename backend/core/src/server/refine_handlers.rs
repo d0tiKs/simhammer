@@ -15,6 +15,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Default, Deserialize, serde::Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 enum SelectionMode {
+    Probability,
     Auto,
     #[default]
     Custom,
@@ -26,11 +27,53 @@ pub(super) struct RefineRequest {
     pub margin_pct: f64,
     #[serde(default)]
     mode: SelectionMode,
+    #[serde(default = "default_probability")]
+    min_probability_pct: f64,
 }
 
-fn candidates(result: &Value, margin: f64, mode: SelectionMode) -> Result<Vec<String>, String> {
+fn default_probability() -> f64 {
+    20.0
+}
+
+// Standard normal CDF, Abramowitz–Stegun approximation (absolute error < 8e-8).
+fn normal_cdf(z: f64) -> f64 {
+    let t = 1.0 / (1.0 + 0.2316419 * z.abs());
+    let tail = (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt()
+        * t
+        * (0.319381530
+            + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+    if z >= 0.0 {
+        1.0 - tail
+    } else {
+        tail
+    }
+}
+
+fn improvement_probability(dps: f64, error: f64, reference: f64, reference_error: f64) -> f64 {
+    let se = (dps * error / 196.0).hypot(reference * reference_error / 196.0);
+    if se == 0.0 {
+        return if dps > reference {
+            1.0
+        } else if dps < reference {
+            0.0
+        } else {
+            0.5
+        };
+    }
+    normal_cdf((dps - reference) / se)
+}
+
+fn candidates(
+    result: &Value,
+    margin: f64,
+    mode: SelectionMode,
+    min_probability: f64,
+) -> Result<Vec<String>, String> {
     if !margin.is_finite() || !(0.0..=10.0).contains(&margin) {
         return Err("Margin must be between 0 and 10 percent".into());
+    }
+    if !min_probability.is_finite() || !(0.0..=100.0).contains(&min_probability) {
+        return Err("Probability must be between 0 and 100 percent".into());
     }
     let target = result["target_error"]
         .as_f64()
@@ -63,7 +106,15 @@ fn candidates(result: &Value, margin: f64, mode: SelectionMode) -> Result<Vec<St
         .filter(|r| !precise(r))
         .filter(|r| {
             r["dps"].as_f64().is_some_and(|d| {
-                if mode == SelectionMode::Auto {
+                if mode == SelectionMode::Probability {
+                    r["precision_pct"]
+                        .as_f64()
+                        .filter(|p| *p >= 0.0)
+                        .is_some_and(|p| {
+                            improvement_probability(d, p, best, reference_error) * 100.0
+                                >= min_probability
+                        })
+                } else if mode == SelectionMode::Auto {
                     // Missing uncertainty is conservatively included.
                     r["precision_pct"]
                         .as_f64()
@@ -175,7 +226,7 @@ pub(super) async fn refine(
         Some(v) => v,
         None => return fail("Source result is missing".into()),
     };
-    let names = match candidates(&original, req.margin_pct, req.mode) {
+    let names = match candidates(&original, req.margin_pct, req.mode, req.min_probability_pct) {
         Ok(n) if !n.is_empty() => n,
         Ok(_) => return fail("No combinations match this margin".into()),
         Err(e) => return fail(e),
@@ -276,6 +327,7 @@ pub(super) async fn refine(
     let queue = queue.get_ref().clone();
     let margin = req.margin_pct;
     let mode = req.mode;
+    let min_probability = req.min_probability_pct;
     tokio::spawn(async move {
         let _temp = temp;
         let token = crate::cancel::CancelToken::new(repo.clone(), &task_id);
@@ -296,7 +348,8 @@ pub(super) async fn refine(
                 if parsed["simc_git_revision"] != original["simc_git_revision"] { return Err("SimC revision differs from the source. Restore the original engine before refining.".into()); }
                 updates.push((name.clone(),parsed));
             }
-            let merged = merge_result(&original,&updates,&source_id,margin,mode)?;
+            let mut merged = merge_result(&original,&updates,&source_id,margin,mode)?;
+            if mode == SelectionMode::Probability { merged["refinement"]["min_probability_pct"] = json!(min_probability); }
             if token.is_cancelled().await { return Err("Cancelled".into()); }
             repo.set_result(&task_id,&merged.to_string(),None).await.map_err(|e| e.to_string())?;
             Ok::<(),String>(())
@@ -340,14 +393,14 @@ mod tests {
     #[test]
     fn margin_selects_only_rough_contenders() {
         assert_eq!(
-            candidates(&source(), 0.0, SelectionMode::Custom).unwrap(),
+            candidates(&source(), 0.0, SelectionMode::Custom, 20.0).unwrap(),
             vec!["Combo 1"]
         );
         assert_eq!(
-            candidates(&source(), 1.0, SelectionMode::Custom).unwrap(),
+            candidates(&source(), 1.0, SelectionMode::Custom, 20.0).unwrap(),
             vec!["Combo 1", "Combo 3"]
         );
-        assert!(candidates(&source(), -1.0, SelectionMode::Custom).is_err());
+        assert!(candidates(&source(), -1.0, SelectionMode::Custom, 20.0).is_err());
     }
     #[test]
     fn copy_replaces_numbers_and_keeps_source_and_gear() {
@@ -387,13 +440,34 @@ mod tests {
             json!({"name":"Combo 6","dps":90.0}),
         ]);
         assert_eq!(
-            candidates(&s, 0.0, SelectionMode::Auto).unwrap(),
+            candidates(&s, 0.0, SelectionMode::Auto, 20.0).unwrap(),
             vec!["Combo 1", "Combo 3", "Combo 5", "Combo 6"]
         );
-        assert!(candidates(&s, 0.0, SelectionMode::Auto)
+        assert!(candidates(&s, 0.0, SelectionMode::Auto, 20.0)
             .unwrap()
             .iter()
             .all(|n| n != "Combo 2"));
+    }
+    #[test]
+    fn probability_threshold_uses_combined_uncertainty() {
+        assert!((normal_cdf(0.0) - 0.5).abs() < 1e-7);
+        assert!((normal_cdf(1.96) - 0.975).abs() < 0.0001);
+        let mut s = source();
+        s["results"][2]["precision_pct"] = json!(3.0);
+        s["results"].as_array_mut().unwrap().extend([
+            json!({"name":"Combo 4","dps":100.0,"precision_pct":1.0}),
+            json!({"name":"Combo 5","dps":90.0}),
+        ]);
+        assert_eq!(
+            candidates(&s, 0.0, SelectionMode::Probability, 20.0).unwrap(),
+            vec!["Combo 1", "Combo 3"]
+        );
+        assert_eq!(
+            candidates(&s, 0.0, SelectionMode::Probability, 50.0).unwrap(),
+            vec!["Combo 1"]
+        );
+        assert!(candidates(&s, 0.0, SelectionMode::Probability, 101.0).is_err());
+        assert_eq!(improvement_probability(100.0, 0.0, 100.0, 0.0), 0.5);
     }
     #[test]
     fn incompatible_engine_rejected() {
