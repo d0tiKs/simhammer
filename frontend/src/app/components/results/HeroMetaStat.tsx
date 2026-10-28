@@ -6,12 +6,12 @@ interface HeroMetaStatProps {
 
 export default function HeroMetaStat({ label, value, note }: HeroMetaStatProps) {
   return (
-    <div className="px-9 py-4">
-      <span className="lbl">{label}</span>
-      <span className="mt-[7px] block font-headline text-base font-extrabold text-on-surface">
+    <div className="min-w-[90px] flex-1">
+      <span className="lbl text-[10px]">{label}</span>
+      <span className="mt-1 block font-headline text-sm font-extrabold text-on-surface">
         {value}
         {note && (
-          <span className="ml-1.5 font-sans text-[11px] font-semibold text-fg-4">{note}</span>
+          <span className="mt-0.5 block font-sans text-[11px] font-semibold text-fg-4">{note}</span>
         )}
       </span>
     </div>

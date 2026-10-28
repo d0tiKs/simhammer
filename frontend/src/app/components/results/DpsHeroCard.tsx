@@ -72,7 +72,8 @@ export default function DpsHeroCard({
     (targetError != null && targetError > 0) ||
     fightLength != null ||
     (iterations != null && iterations > 0) ||
-    elapsedTime != null;
+    elapsedTime != null ||
+    (desiredTargets != null && desiredTargets > 0);
 
   const realmSlug = useRealmSlug(playerRealm);
   const faction = useFaction(realmSlug, playerName, playerRegion);
@@ -143,7 +144,7 @@ export default function DpsHeroCard({
       </div>
 
       {hasMetadata && (
-        <div className="relative z-10 grid grid-cols-2 border-t border-line/[0.06] bg-[color:var(--hero-meta-bg)] md:grid-cols-5 [&>*+*]:shadow-[inset_1px_0_0_rgb(var(--c-line)/calc(0.06*var(--c-line-k)))]">
+        <div className="relative z-10 flex flex-wrap gap-x-6 gap-y-3 border-t border-line/[0.06] bg-[color:var(--hero-meta-bg)] px-6 py-3">
           {targetError != null && targetError > 0 && (
             <HeroMetaStat
               label={t('results.error')}
@@ -155,12 +156,7 @@ export default function DpsHeroCard({
             <HeroMetaStat label={t('results.fightLength')} value={formatDuration(fightLength)} />
           )}
           {desiredTargets != null && desiredTargets > 0 && (
-            <HeroMetaStat
-              label={t('results.targets')}
-              value={
-                desiredTargets === 1 ? '1 (Patchwerk)' : `${desiredTargets} ${t('results.targets')}`
-              }
-            />
+            <HeroMetaStat label={t('results.targets')} value={`${desiredTargets}`} />
           )}
           {iterations != null && iterations > 0 && (
             <HeroMetaStat label={t('results.iterations')} value={iterations.toLocaleString()} />
