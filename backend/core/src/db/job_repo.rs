@@ -109,6 +109,7 @@ fn job_to_overview_summary(
         precise_error_pct: s.precise_error_pct,
         batch_id: j.batch_id.clone(),
         provider_id: j.provider_id.clone(),
+        scenario: crate::overview_context::extract(&j.request_json, &j.result_json),
     }
 }
 
@@ -174,6 +175,12 @@ fn row_to_overview_summary(
     let summary = extract_result_summary(&result_json, &simc_input);
     let iterations: i32 = r.try_get("iterations").unwrap_or(0);
     crate::models::JobOverviewSummary {
+        scenario: crate::overview_context::extract(
+            &r.try_get::<Option<String>, _>("request_json")
+                .ok()
+                .flatten(),
+            &result_json,
+        ),
         id: r.get("id"),
         status: str_to_status(&status_str),
         sim_type: r.get("sim_type"),
@@ -759,7 +766,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, provider_id, \
+                            iterations, batch_id, provider_id, request_json, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('pending', 'running', 'paused') \
@@ -772,7 +779,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, result_json, provider_id, \
+                            iterations, batch_id, result_json, provider_id, request_json, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE status IN ('done', 'failed', 'cancelled') \
@@ -836,7 +843,7 @@ impl JobRepo {
                     "SELECT id, status, sim_type, created_at, fight_style, \
                             progress_pct, progress_stage, progress_detail, \
                             simc_input_mode, pause_requested, error_message, \
-                            iterations, batch_id, result_json, provider_id, \
+                            iterations, batch_id, result_json, provider_id, request_json, \
                             SUBSTR(simc_input, 1, 4096) AS simc_input_head \
                      FROM jobs \
                      WHERE {status_clause} \

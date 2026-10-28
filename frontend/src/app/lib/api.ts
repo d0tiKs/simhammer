@@ -266,6 +266,18 @@ export function serializeRoute(
 
 export type JobStatus = 'pending' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 
+export interface RunScenario {
+  targets: number | null;
+  duration: number | null;
+  variation: number | null;
+  rotation: string | null;
+  settings: Record<string, unknown>;
+  simc_revision: string | null;
+  baseline_dps: number | null;
+  baseline_error_pct?: number | null;
+  target_error?: number | null;
+}
+
 export interface JobOverviewSummary {
   id: string;
   status: JobStatus;
@@ -288,6 +300,7 @@ export interface JobOverviewSummary {
   precise_error_pct?: number | null;
   batch_id: string | null;
   provider_id: string;
+  scenario?: RunScenario;
 }
 
 /** Active sims (pending/running/paused) + up to 20 most recent terminal jobs. */

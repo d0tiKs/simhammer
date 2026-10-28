@@ -1,278 +1,207 @@
-import { useMemo, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { JobOverviewSummary } from '../../lib/api';
 import { isActiveStatus } from '../../lib/useActiveSims';
-import { specDisplayName } from '../../lib/types';
 import { useLanguage } from '../../lib/i18n';
 import { formatDps } from '../../lib/format';
+import {
+  durationLabel,
+  gainVsEquipped,
+  groupRuns,
+  rotationLabel,
+  scenarioDifferences,
+  targetLabel,
+} from '../../lib/runLibrary';
 import { JobActionButtons } from './JobActionButtons';
-import { SIM_TYPE_LABELS, SIM_TYPE_PILL, StatusDot, TD, timeAgo } from './shared';
+import { SIM_TYPE_LABELS, SIM_TYPE_PILL, StatusDot, timeAgo } from './shared';
 import Button from '../../components/ui/Button';
 import Pill from '../../components/ui/Pill';
 
-type HistoryEntry =
-  | { type: 'single'; sim: JobOverviewSummary }
-  | { type: 'batch'; batchId: string; sims: JobOverviewSummary[] };
-
-function groupByBatch(sims: JobOverviewSummary[]): HistoryEntry[] {
-  const entries: HistoryEntry[] = [];
-  const batches = new Map<string, JobOverviewSummary[]>();
-  for (const sim of sims) {
-    if (!sim.batch_id) {
-      entries.push({ type: 'single', sim });
-      continue;
-    }
-    let group = batches.get(sim.batch_id);
-    if (!group) {
-      group = [];
-      batches.set(sim.batch_id, group);
-      entries.push({ type: 'batch', batchId: sim.batch_id, sims: group });
-    }
-    group.push(sim);
-  }
-  return entries;
-}
-
-/** History-style row for the All view. `trailing` (delete X or action cluster)
- * is rendered inline beside the timestamp to keep row heights uniform. */
-function HistoryRow({ job, trailing }: { job: JobOverviewSummary; trailing: ReactNode }) {
-  const router = useRouter();
-  const { t } = useLanguage();
-  const isFailed = job.status === 'failed';
-  const navigate = () => router.push(`/sim/${job.id}`);
-
-  return (
-    <tr
-      onClick={navigate}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') navigate();
-      }}
-      tabIndex={0}
-      className={`group cursor-pointer focus:outline-none ${isFailed ? 'opacity-70' : ''}`}
-    >
-      <td className={TD}>
-        <div className="flex min-w-0 items-center gap-3">
-          <StatusDot status={job.status} />
-          <div className="min-w-0">
-            <p className="truncate font-bold text-on-surface">
-              {job.player_name || (isFailed ? t('sims.failedSimulation') : t('sims.simulation'))}
-            </p>
-            <p className={`truncate text-[12px] ${isFailed ? 'text-negative' : 'text-outline'}`}>
-              {isFailed && job.error_message
-                ? job.error_message.slice(0, 60)
-                : job.player_class
-                  ? specDisplayName(job.player_class)
-                  : job.sim_type}
-            </p>
-          </div>
-        </div>
-      </td>
-      <td className={TD}>
-        <Pill variant={SIM_TYPE_PILL[job.sim_type] ?? 'neutral'}>
-          {SIM_TYPE_LABELS[job.sim_type] || job.sim_type}
-        </Pill>
-      </td>
-      <td className={`${TD} text-right`}>
-        {job.dps ? (
-          <span className="font-headline text-sm font-extrabold text-on-surface">
-            {formatDps(job.precise_dps ?? job.dps)}
-            {job.precise_dps == null ? (
-              <span className="ml-1 text-xs font-normal text-outline">estimate</span>
-            ) : (
-              <span className="mt-0.5 block text-xs font-normal text-outline">
-                ±{job.precise_error_pct}%
-              </span>
-            )}
-          </span>
-        ) : (
-          <span className="text-outline">—</span>
-        )}
-      </td>
-      <td className={TD}>
-        <Pill>{job.fight_style}</Pill>
-      </td>
-      <td className={`${TD} text-right`}>
-        <div className="flex items-center justify-end gap-1">
-          <span className="text-outline">{timeAgo(job.created_at, t)}</span>
-          {trailing}
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-interface RowProps {
-  job: JobOverviewSummary;
+interface Props {
+  jobs: JobOverviewSummary[];
+  loading: boolean;
+  grouped: boolean;
   busy: string | null;
   onPause: (id: string) => void;
   onResume: (id: string) => void;
   onCancel: (id: string) => void;
   onDelete: (id: string) => void;
 }
-
-function ActionableHistoryRow({ job, busy, onPause, onResume, onCancel, onDelete }: RowProps) {
-  const { t } = useLanguage();
-  const trailing = isActiveStatus(job.status) ? (
-    <JobActionButtons
-      job={job}
-      busy={busy === job.id}
-      onPause={() => onPause(job.id)}
-      onResume={() => onResume(job.id)}
-      onCancel={() => onCancel(job.id)}
-      compact
-    />
-  ) : (
-    <Button
-      disabled={busy === job.id}
-      onClick={(e: React.MouseEvent) => {
-        e.stopPropagation();
-        onDelete(job.id);
-      }}
-      title={t('sims.deleteFromHistory')}
-      variant="text"
-      size="sm"
-      className="ml-1 hover:text-negative"
-    >
-      ✕
-    </Button>
-  );
-  return <HistoryRow job={job} trailing={trailing} />;
+function settingValue(value: unknown): string {
+  if (value === true) return 'On';
+  if (value === false) return 'Off';
+  if (value == null) return 'Not recorded';
+  if (typeof value === 'object') {
+    const item = value as { name?: string; value?: string };
+    if (item.name) return item.name;
+    return Object.entries(value)
+      .map(([key, v]) => `${key.replaceAll('_', ' ')}: ${settingValue(v)}`)
+      .join(' · ');
+  }
+  return String(value);
 }
-
-function BatchGroup({
-  entry,
+export function AllView({
+  jobs,
+  loading,
+  grouped,
   busy,
   onPause,
   onResume,
   onCancel,
   onDelete,
-}: {
-  entry: Extract<HistoryEntry, { type: 'batch' }>;
-  busy: string | null;
-  onPause: (id: string) => void;
-  onResume: (id: string) => void;
-  onCancel: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
+}: Props) {
   const { t } = useLanguage();
-  const first = entry.sims[0];
-  const simType =
-    SIM_TYPE_LABELS[first?.sim_type ?? ''] || first?.sim_type || t('sims.simFallback');
+  if (loading) return <div className="py-8 text-center text-outline">Loading runs…</div>;
+  if (!jobs.length)
+    return <div className="card p-8 text-center text-outline">No runs match these filters.</div>;
+  const groups = groupRuns(jobs, grouped);
   return (
-    <>
-      <tr>
-        <td
-          colSpan={5}
-          className="h-11 border-b border-line/[0.06] bg-surface-container-high/50 px-6"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <span className="lbl flex items-center gap-2 text-gold">
-              <svg
-                className="h-3.5 w-3.5"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              >
-                <path d="M2 4h12M2 8h12M2 12h12" />
-              </svg>
-              {t('sims.batchLabel', { simType, count: entry.sims.length })}
-              {first?.player_name && (
-                <span className="ml-2 font-sans text-[12px] font-semibold normal-case tracking-normal text-on-surface-variant">
-                  {first.player_name}
+    <section className="card overflow-hidden px-4 sm:px-6">
+      {groups.map((group) => (
+        <div key={group.key}>
+          {group.label && (
+            <h2 className="border-b border-line/[0.06] py-4 text-sm font-semibold text-gold">
+              {group.label} <span className="font-normal text-outline">({group.jobs.length})</span>
+              {scenarioDifferences(group.jobs[0], jobs) && (
+                <span className="mt-1 block text-xs font-normal text-outline">
+                  {scenarioDifferences(group.jobs[0], jobs)}
                 </span>
               )}
-            </span>
-            <span className="text-[12px] text-outline">
-              {first?.created_at ? timeAgo(first.created_at, t) : ''}
-            </span>
-          </div>
-        </td>
-      </tr>
-      {entry.sims.map((sim) => (
-        <ActionableHistoryRow
-          key={sim.id}
-          job={sim}
-          busy={busy}
-          onPause={onPause}
-          onResume={onResume}
-          onCancel={onCancel}
-          onDelete={onDelete}
-        />
-      ))}
-    </>
-  );
-}
-
-interface Props {
-  jobs: JobOverviewSummary[];
-  loading: boolean;
-  busy: string | null;
-  onPause: (id: string) => void;
-  onResume: (id: string) => void;
-  onCancel: (id: string) => void;
-  onDelete: (id: string) => void;
-}
-
-export function AllView({ jobs, loading, busy, onPause, onResume, onCancel, onDelete }: Props) {
-  const { t } = useLanguage();
-  const entries = useMemo(() => groupByBatch(jobs), [jobs]);
-
-  if (loading) {
-    return (
-      <div className="py-12 text-center">
-        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary" />
-      </div>
-    );
-  }
-  if (jobs.length === 0) {
-    return <div className="card p-12 text-center text-outline">{t('sims.noSimsYet')}</div>;
-  }
-
-  return (
-    <section className="card overflow-hidden">
-      <table className="w-full border-collapse text-left">
-        <thead>
-          <tr>
-            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colSimulation')}</th>
-            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colType')}</th>
-            <th className="lbl h-11 border-b border-line/[0.06] px-6 text-right">DPS</th>
-            <th className="lbl h-11 border-b border-line/[0.06] px-6">{t('sims.colFight')}</th>
-            <th className="lbl h-11 border-b border-line/[0.06] px-6 text-right">
-              {t('sims.colTime')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((entry) => {
-            if (entry.type === 'single') {
-              return (
-                <ActionableHistoryRow
-                  key={entry.sim.id}
-                  job={entry.sim}
-                  busy={busy}
-                  onPause={onPause}
-                  onResume={onResume}
-                  onCancel={onCancel}
-                  onDelete={onDelete}
-                />
-              );
-            }
+            </h2>
+          )}
+          {group.jobs.map((job, index) => {
+            const scenario = job.scenario;
+            const gain = gainVsEquipped(job);
             return (
-              <BatchGroup
-                key={entry.batchId}
-                entry={entry}
-                busy={busy}
-                onPause={onPause}
-                onResume={onResume}
-                onCancel={onCancel}
-                onDelete={onDelete}
-              />
+              <article key={job.id} className="border-b border-line/[0.06] py-4 last:border-0">
+                {job.batch_id && job.batch_id !== group.jobs[index - 1]?.batch_id && (
+                  <p className="mb-3 text-xs text-gold">
+                    Batch · {SIM_TYPE_LABELS[job.sim_type] ?? job.sim_type}
+                  </p>
+                )}
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/sim/${job.id}`}
+                      className="flex items-center gap-2 font-bold text-on-surface hover:text-gold"
+                    >
+                      <StatusDot status={job.status} />
+                      <span className="truncate">{job.player_name || t('sims.simulation')}</span>
+                    </Link>
+                    <div className="mb-2 mt-1">
+                      <Pill variant={SIM_TYPE_PILL[job.sim_type] ?? 'neutral'}>
+                        {SIM_TYPE_LABELS[job.sim_type] ?? job.sim_type}
+                      </Pill>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <span className="text-on-surface">{job.fight_style}</span>
+                      <span className="font-semibold text-gold">{targetLabel(job)}</span>
+                      <span className="text-outline">
+                        {durationLabel(scenario?.duration)}
+                        {scenario?.variation != null
+                          ? ` ±${Math.round(scenario.variation * 100)}%`
+                          : ''}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-outline">{rotationLabel(scenario?.rotation)}</p>
+                    {job.error_message && (
+                      <p className="mt-1 break-words text-xs text-negative">
+                        {job.error_message.slice(0, 160)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right tabular-nums">
+                    <Link
+                      href={`/sim/${job.id}`}
+                      className="font-headline text-lg font-extrabold text-on-surface hover:text-gold"
+                    >
+                      {job.dps != null ? formatDps(job.precise_dps ?? job.dps) : '—'}{' '}
+                      <span className="text-xs font-normal text-outline">DPS</span>
+                    </Link>
+                    {gain != null && (
+                      <p
+                        className={`mt-1 text-xs ${gain >= 0 ? 'text-positive' : 'text-negative'}`}
+                      >
+                        {gain >= 0 ? '+' : ''}
+                        {gain.toFixed(1)}% vs equipped
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-outline">
+                      {job.precise_dps == null
+                        ? job.dps == null
+                          ? job.status
+                          : 'Estimate'
+                        : `±${job.precise_error_pct}% error`}
+                    </p>
+                    <p className="mt-1 text-xs text-outline">{timeAgo(job.created_at, t)}</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
+                  <details className="min-w-0 flex-1 text-xs text-outline">
+                    <summary className="w-fit cursor-pointer py-1">Settings</summary>
+                    <dl className="mt-2 space-y-1 break-words rounded bg-surface-container-high/50 p-3">
+                      <div>
+                        <dt className="inline text-on-surface">Character: </dt>
+                        <dd className="inline">
+                          {job.player_name}
+                          {job.realm ? `-${job.realm}` : ''} · {job.player_class ?? 'Spec unknown'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="inline text-on-surface">Duration variation: </dt>
+                        <dd className="inline">
+                          {scenario?.variation == null
+                            ? 'Not recorded'
+                            : `±${Math.round(scenario.variation * 100)}%`}
+                        </dd>
+                      </div>
+                      {Object.entries(scenario?.settings ?? {}).map(([key, value]) => (
+                        <div key={key}>
+                          <dt className="inline text-on-surface">{key.replaceAll('_', ' ')}: </dt>
+                          <dd className="inline">{settingValue(value)}</dd>
+                        </div>
+                      ))}
+                      <div>
+                        <dt className="inline text-on-surface">SimC revision: </dt>
+                        <dd className="inline">{scenario?.simc_revision ?? 'Not recorded'}</dd>
+                      </div>
+                      <div>
+                        <dt className="inline text-on-surface">Iterations: </dt>
+                        <dd className="inline">{job.iterations.toLocaleString()} maximum</dd>
+                      </div>
+                      <div>
+                        <Link href={`/sim/${job.id}`} className="text-gold hover:underline">
+                          Open full report →
+                        </Link>
+                      </div>
+                    </dl>
+                  </details>
+                  {isActiveStatus(job.status) ? (
+                    <JobActionButtons
+                      job={job}
+                      busy={busy === job.id}
+                      onPause={() => onPause(job.id)}
+                      onResume={() => onResume(job.id)}
+                      onCancel={() => onCancel(job.id)}
+                      compact
+                    />
+                  ) : (
+                    <Button
+                      disabled={busy === job.id}
+                      onClick={() => onDelete(job.id)}
+                      title={t('sims.deleteFromHistory')}
+                      variant="text"
+                      size="sm"
+                      className="hover:text-negative"
+                    >
+                      ✕
+                    </Button>
+                  )}
+                </div>
+              </article>
             );
           })}
-        </tbody>
-      </table>
+        </div>
+      ))}
     </section>
   );
 }

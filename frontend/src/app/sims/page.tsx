@@ -13,6 +13,8 @@ import {
 import { isActiveStatus, useActiveSims } from '../lib/useActiveSims';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { blizzardRealmSlug, parseCharacterInfo } from '../lib/character';
+import { scenarioKey, scenarioLabel, rotationLabel, scenarioDifferences } from '../lib/runLibrary';
+import { SIM_TYPE_LABELS } from './_components/shared';
 import { getCharacters } from '../lib/saved-characters';
 import { useLanguage } from '../lib/i18n';
 import { ActiveView } from './_components/ActiveView';
@@ -87,7 +89,11 @@ export default function SimsPage() {
       `${a.name}-${a.realm}`.localeCompare(`${b.name}-${b.realm}`)
     );
   }, [knownCharacters, activeSnapshot, character, filterCharacter]);
-  const [view, setView] = useState<ViewMode>('active');
+  const [view, setView] = useState<ViewMode>('all');
+  const [grouped, setGrouped] = useState(true);
+  const [scenarioFilter, setScenarioFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [rotationFilter, setRotationFilter] = useState('all');
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -137,10 +143,33 @@ export default function SimsPage() {
     return merged.filter(matchesCharacter);
   }, [activeSnapshot, allJobs, matchesCharacter]);
 
-  const activeList = useMemo(
-    () => activeSnapshot.filter((j) => isActiveStatus(j.status) && matchesCharacter(j)),
-    [activeSnapshot, matchesCharacter]
+  const scenarioOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const job of mergedJobs)
+      options.set(
+        scenarioKey(job),
+        [scenarioLabel(job), scenarioDifferences(job, mergedJobs)].filter(Boolean).join(' · ')
+      );
+    return [...options.entries()];
+  }, [mergedJobs]);
+  const simTypes = [...new Set(mergedJobs.map((job) => job.sim_type))];
+  const rotations = [...new Set(mergedJobs.map((job) => job.scenario?.rotation ?? 'unknown'))];
+  const visibleJobs = useMemo(
+    () =>
+      mergedJobs.filter(
+        (job) =>
+          (scenarioFilter === 'all' || scenarioKey(job) === scenarioFilter) &&
+          (typeFilter === 'all' || job.sim_type === typeFilter) &&
+          (rotationFilter === 'all' || (job.scenario?.rotation ?? 'unknown') === rotationFilter)
+      ),
+    [mergedJobs, scenarioFilter, typeFilter, rotationFilter]
   );
+  const activeList = visibleJobs.filter((job) => isActiveStatus(job.status));
+  useEffect(() => {
+    setScenarioFilter('all');
+    setTypeFilter('all');
+    setRotationFilter('all');
+  }, [filterCharacter]);
 
   const refreshAll = useCallback(() => {
     refreshActive();
@@ -225,7 +254,7 @@ export default function SimsPage() {
 
   return (
     <div className="space-y-5 pb-20">
-      <div className="flex items-end justify-between gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <PageHeader
           eyebrow={t('nav.library')}
           title={t('sims.title')}
@@ -236,7 +265,7 @@ export default function SimsPage() {
           onChange={setView}
           options={[
             { key: 'active', label: t('sims.tabActive', { count: activeList.length }) },
-            { key: 'all', label: t('sims.tabAll', { count: mergedJobs.length }) },
+            { key: 'all', label: t('sims.tabAll', { count: visibleJobs.length }) },
           ]}
         />
       </div>
@@ -247,29 +276,88 @@ export default function SimsPage() {
         </div>
       )}
 
-      <label className="flex flex-wrap items-center gap-3 text-sm text-outline">
-        Character
-        <select
-          className="rounded border border-outline/30 bg-surface-container px-3 py-2 text-on-surface"
-          value={filterCharacter ? characterKey(filterCharacter) : 'all'}
-          onChange={(event) =>
-            setFilterCharacter(
-              characterOptions.find((entry) => characterKey(entry) === event.target.value) ?? null
-            )
-          }
-        >
-          {characterOptions.map((entry) => (
-            <option key={characterKey(entry)} value={characterKey(entry)}>
-              {entry.name}
-              {entry.realm ? `-${entry.realm}` : ''}
-            </option>
-          ))}
-          <option value="all">All characters</option>
-        </select>
-        <span>{mergedJobs.length} runs</span>
-      </label>
-
-      <StatsOverview sims={mergedJobs} />
+      <StatsOverview sims={visibleJobs} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex min-w-0 flex-wrap items-center gap-3 text-sm text-outline">
+          Character
+          <select
+            className="min-w-0 max-w-full rounded border border-outline/30 bg-surface-container px-3 py-2 text-on-surface"
+            value={filterCharacter ? characterKey(filterCharacter) : 'all'}
+            onChange={(event) =>
+              setFilterCharacter(
+                characterOptions.find((entry) => characterKey(entry) === event.target.value) ?? null
+              )
+            }
+          >
+            {characterOptions.map((entry) => (
+              <option key={characterKey(entry)} value={characterKey(entry)}>
+                {entry.name}
+                {entry.realm ? `-${entry.realm}` : ''}
+              </option>
+            ))}
+            <option value="all">All characters</option>
+          </select>
+        </label>
+        <ToggleButtonGroup
+          value={grouped ? 'scenario' : 'recent'}
+          onChange={(value) => setGrouped(value === 'scenario')}
+          options={[
+            { key: 'recent', label: 'Recent' },
+            { key: 'scenario', label: 'By scenario' },
+          ]}
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label className="min-w-0 text-xs text-outline">
+          Scenario
+          <select
+            className="mt-1 w-full rounded border border-outline/30 bg-surface-container px-2 py-2 text-sm text-on-surface"
+            value={scenarioFilter}
+            onChange={(e) => setScenarioFilter(e.target.value)}
+          >
+            <option value="all">All scenarios</option>
+            {scenarioOptions.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-0 text-xs text-outline">
+          Sim type
+          <select
+            className="mt-1 w-full rounded border border-outline/30 bg-surface-container px-2 py-2 text-sm text-on-surface"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
+            <option value="all">All sim types</option>
+            {simTypes.map((type) => (
+              <option key={type} value={type}>
+                {SIM_TYPE_LABELS[type] ?? type}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-0 text-xs text-outline">
+          Rotation
+          <select
+            className="mt-1 w-full rounded border border-outline/30 bg-surface-container px-2 py-2 text-sm text-on-surface"
+            value={rotationFilter}
+            onChange={(e) => setRotationFilter(e.target.value)}
+          >
+            <option value="all">All rotations</option>
+            {rotations.map((rotation) => (
+              <option key={rotation} value={rotation}>
+                {rotationLabel(rotation === 'unknown' ? null : rotation)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="text-xs text-outline" aria-live="polite">
+        Showing {view === 'active' ? activeList.length : visibleJobs.length} of {mergedJobs.length}{' '}
+        runs
+      </p>
 
       {view === 'active' ? (
         <ActiveView
@@ -281,7 +369,8 @@ export default function SimsPage() {
         />
       ) : (
         <AllView
-          jobs={mergedJobs}
+          jobs={visibleJobs}
+          grouped={grouped}
           loading={allLoading}
           busy={busy}
           onPause={handlePause}

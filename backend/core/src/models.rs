@@ -203,6 +203,7 @@ pub struct JobOverviewSummary {
     pub precise_error_pct: Option<f64>,
     pub batch_id: Option<String>,
     pub provider_id: String,
+    pub scenario: serde_json::Value,
 }
 
 pub struct ResultSummary {
