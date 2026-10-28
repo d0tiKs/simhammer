@@ -222,6 +222,26 @@ pub(super) async fn get_sim_status(
         Some(0)
     };
 
+    let automatic_refinement_requested = if job.status == JobStatus::Done
+        && parsed_result.as_ref().is_some_and(|r| {
+            matches!(
+                r["type"].as_str(),
+                Some("top_gear" | "droptimizer" | "upgrade_compare")
+            ) && r.get("refinement").is_none()
+                && r.get("automatic_refinement").is_none()
+        }) {
+        match repo.get(&job_id).await {
+            Ok(Some(full)) => super::refine_handlers::automatic_threshold(
+                full.request_json.as_deref(),
+                parsed_result.as_ref(),
+            )
+            .is_some(),
+            _ => false,
+        }
+    } else {
+        false
+    };
+
     HttpResponse::Ok().json(json!({
         "id": job.id,
         "status": job.status,
@@ -229,6 +249,8 @@ pub(super) async fn get_sim_status(
         "progress_stage": job.progress_stage,
         "progress_detail": job.progress_detail,
         "stages_completed": job.stages_completed,
+        "automatic_refinement_requested": automatic_refinement_requested,
+        "automatic_refinement": parsed_result.as_ref().and_then(|r| r.get("automatic_refinement")),
         "result": parsed_result,
         "error": job.error_message,
         "simc_input_mode": job.simc_input_mode.as_str(),

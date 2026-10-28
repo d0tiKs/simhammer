@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollWhileVisible } from '../../lib/usePollWhileVisible';
 import SimResultView from '../../components/results/SimResultView';
@@ -42,6 +42,8 @@ interface JobData {
   provider_id: string;
   share_id?: string | null;
   rerun_of?: string | null;
+  automatic_refinement_requested?: boolean;
+  automatic_refinement?: { state: string; id?: string; detail?: string; count?: number };
 }
 
 // Consecutive status-poll failures tolerated before giving up (~2 min at 2s).
@@ -50,6 +52,8 @@ const MAX_POLL_FAILURES = 60;
 export default function SimResultClient() {
   const { t } = useLanguage();
   const params = useParams();
+  const router = useRouter();
+  const followAutomatic = useRef(false);
   const paramId = params.id as string;
 
   // In static export, useParams() may initially return "_" (the generateStaticParams
@@ -60,7 +64,16 @@ export default function SimResultClient() {
     if (match) id = match[1];
   }
 
+  useEffect(() => {
+    followAutomatic.current = false;
+  }, [id]);
   const [job, setJob] = useState<JobData | null>(null);
+  useEffect(() => {
+    if (followAutomatic.current && job?.automatic_refinement?.id) {
+      followAutomatic.current = false;
+      router.push(`/sim/${job.automatic_refinement.id}`);
+    }
+  }, [job?.automatic_refinement?.id, router]);
   const caps = useProviderCaps(job?.provider_id ?? '');
   const providerMeta = useProviderMeta(job?.provider_id ?? '');
   const [fetchError, setFetchError] = useState('');
@@ -92,7 +105,9 @@ export default function SimResultClient() {
         const data: JobData = await res.json();
         pollFailuresRef.current = 0;
         setFetchError(''); // preserve the original per-poll error reset on success
+        if (data.status === 'pending' || data.status === 'running') followAutomatic.current = true;
         setJob(data);
+        if (data.status === 'done' && data.automatic_refinement_requested) return 2000;
         return data.status === 'pending' || data.status === 'running' || data.status === 'paused'
           ? 2000
           : null;
@@ -366,6 +381,28 @@ export default function SimResultClient() {
         </div>
       )}
 
+      {job.automatic_refinement_requested && (
+        <div className="card px-4 py-3 text-sm text-gold">
+          Initial simulation complete. Preparing automatic refinement…
+        </div>
+      )}
+      {job.automatic_refinement && (
+        <div className="card px-4 py-3 text-sm text-on-surface">
+          {job.automatic_refinement.id ? (
+            <a href={`/sim/${job.automatic_refinement.id}`} className="text-gold underline">
+              View automatic refinement
+              {job.automatic_refinement.count != null
+                ? ` (${job.automatic_refinement.count} combinations)`
+                : ''}{' '}
+              and updated report
+            </a>
+          ) : job.automatic_refinement.state === 'skipped' ? (
+            'Automatic refinement: no combinations met the threshold.'
+          ) : (
+            `Automatic refinement could not start: ${job.automatic_refinement.detail || 'unknown error'}`
+          )}
+        </div>
+      )}
       {job.rerun_of && <ShareComparisonStrip shareId={job.rerun_of} local={r} />}
 
       <SimResultView

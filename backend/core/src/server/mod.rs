@@ -198,6 +198,12 @@ pub async fn start_server(
     let admin_secret = web::Data::new(admin_handlers::AdminSecret(
         uuid::Uuid::new_v4().to_string(),
     ));
+    refine_handlers::start_automatic_refinement(
+        job_repo.clone(),
+        simc_data.clone(),
+        log_data.clone(),
+        local_queue_data.clone(),
+    );
     let frontend = frontend_dir.clone();
     let data = data_dir.clone();
 

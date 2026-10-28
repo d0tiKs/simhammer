@@ -22,8 +22,7 @@ visibility filter and uses the complete report.
 `POST /api/sim/{id}/refine` accepts
 `{"mode":"probability","min_probability_pct":20}`, `{"mode":"auto"}`, or
 `{"mode":"custom","margin_pct":0}`. Requests without `mode` retain the original
-custom-margin behavior. Copied reports record which mode was used. Only completed Top Gear
-jobs are supported. The operation runs through the local simulation queue, with
+custom-margin behavior. Copied reports record which mode was used. Completed Top Gear, Drop Finder, and Crest Upgrades jobs are supported. The operation runs through the local simulation queue, with
 progress and cancellation available through the normal job endpoints. Closing
 the browser does not stop it.
 
@@ -48,11 +47,43 @@ This narrows uncertainty around selected contenders; it does not guarantee the
 best combination outside the selected margin was included. Engine revision
 matching also cannot establish that every external data source stayed identical.
 
+## Automatic refinement at launch
+
+Under the simulation settings' Advanced section, comparison tools offer
+"Automatically refine promising results". It is off by default. When enabled,
+the minimum estimated improvement probability defaults to 20%, and both launch
+preferences are stored in the browser. They are independent of named sim profiles.
+Quick Sim and unrelated tools do not run automatic refinement.
+
+The normalized request records `options.auto_refine_probability`. The server
+checks completed comparison jobs independently of the browser and starts one
+local refinement pass. Each source gets a deterministic `auto-refine-<source-id>`
+child ID and a result marker linking to that child. Completed refinement reports
+never schedule further passes. Existing children and processed source markers
+prevent duplicate work across coordinator ticks and server restarts. A failed or
+cancelled child is not silently retried. No qualifying candidates produces a
+"skipped" marker; reconstruction or engine errors produce an explanatory marker.
+
+When watching a running initial sim, the browser follows its automatic child.
+Opening a finished source directly retains the original report and offers a link
+instead. This preserves access to the original results. The child uses the usual
+queue, overall progress, cancellation, and copied-report behavior.
+
+The coordinator uses the SQL-backed self-hosted server. It has no schema migration.
+It polls only completed comparison jobs whose normalized requests opted in and
+whose results have no refinement/automatic-processing marker.
+
 ## Validation
 
 - Backend unit tests: `cd backend && cargo test -p simhammer-core refine_handlers --lib --locked`
 - Frontend checks: `cd frontend && npx tsc --noEmit && npm run test:topgear`
 - Production server and static frontend builds.
+- Automatic-launch tests used an isolated SQLite backup and separate server.
+  Three fixtures exercised starting one real SimC pass, skipping a fully precise
+  report, and recording a missing-engine failure. The success fixture used two
+  CPU threads and a loose 1% target to minimize impact on the production batch.
+  Restarting the test server preserved exactly one automatic child, with no
+  recursive or duplicate work.
 - Live test against a SQLite backup in a separate Podman container on port 18000.
   A three-row fixture retained the top rough combination, highest precise
   combination, and baseline from the user's report. One real rerun replaced the
@@ -62,8 +93,8 @@ matching also cannot establish that every external data source stayed identical.
 
 ## Removing the feature
 
-Base refinement, Auto selection, and Probability selection have separate local
-commits. Revert the latest selection commit to remove only that option. To remove
+Base refinement, Auto selection, Probability selection, and launch-time
+automation have separate local commits. Revert the latest selection commit to remove only that option. To remove
 refinement entirely, revert its follow-up commits and then the base refinement
 commit. Rebuild the server and
 frontend after reverting, retaining the earlier UI customizations.

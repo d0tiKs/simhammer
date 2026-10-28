@@ -71,7 +71,7 @@ export default function SimResultView({
   return isGearComparisonResult(result) ? (
     <>
       <TopGearResults
-        allowRefinement={result.type === 'top_gear'}
+        allowRefinement={['top_gear', 'droptimizer', 'upgrade_compare'].includes(result.type)}
         refinement={result.refinement}
         playerName={result.player_name}
         playerClass={result.player_class}

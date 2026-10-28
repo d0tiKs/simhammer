@@ -29,6 +29,8 @@ pub(super) struct RefineRequest {
     mode: SelectionMode,
     #[serde(default = "default_probability")]
     min_probability_pct: f64,
+    #[serde(skip)]
+    automatic_id: Option<String>,
 }
 
 fn default_probability() -> f64 {
@@ -159,6 +161,9 @@ fn merge_result(
     mode: SelectionMode,
 ) -> Result<Value, String> {
     let mut result = source.clone();
+    if let Some(object) = result.as_object_mut() {
+        object.remove("automatic_refinement");
+    }
     let base = source["base_dps"].as_f64().ok_or("Missing baseline DPS")?;
     let revision = source["simc_git_revision"]
         .as_str()
@@ -215,8 +220,13 @@ pub(super) async fn refine(
         Ok(Some(j)) => j,
         _ => return fail("Source job not found".into()),
     };
-    if source.status != JobStatus::Done || source.sim_type != "top_gear" {
-        return fail("Only completed Top Gear reports can be refined".into());
+    if source.status != JobStatus::Done
+        || !matches!(
+            source.sim_type.as_str(),
+            "top_gear" | "droptimizer" | "upgrade_compare"
+        )
+    {
+        return fail("Only completed gear-comparison reports can be refined".into());
     }
     let original: Value = match source
         .result_json
@@ -305,11 +315,14 @@ pub(super) async fn refine(
     }
     let mut job = Job::new(
         source.simc_input.clone(),
-        "top_gear".into(),
+        source.sim_type.clone(),
         source.iterations.max(1_000_000),
         source.fight_style.clone(),
         target,
     );
+    if let Some(id) = &req.automatic_id {
+        job.id = id.clone();
+    }
     job.request_json = source.request_json.clone();
     let id = job.id.clone();
     if let Err(e) = repo.insert(&job).await {
@@ -362,6 +375,128 @@ pub(super) async fn refine(
         logs.remove(&task_id);
     });
     HttpResponse::Ok().json(json!({"id":id,"count":names.len()}))
+}
+
+pub(super) fn automatic_threshold(request: Option<&str>, result: Option<&Value>) -> Option<f64> {
+    if result
+        .is_some_and(|r| r.get("refinement").is_some() || r.get("automatic_refinement").is_some())
+    {
+        return None;
+    }
+    let envelope: NormalizedRequest = serde_json::from_str(request?).ok()?;
+    envelope.payload["options"]["auto_refine_probability"]
+        .as_f64()
+        .filter(|p| p.is_finite() && (0.0..=100.0).contains(p))
+}
+
+// Runs independently of the browser. Sources without a terminal marker are
+// revisited after restart; the deterministic job ID prevents duplicate batches.
+pub(super) fn start_automatic_refinement(
+    repo: web::Data<JobRepo>,
+    bins: web::Data<Arc<SimcBinaries>>,
+    logs: web::Data<Arc<LogBuffer>>,
+    queue: web::Data<crate::compute::local::LocalSimQueue>,
+) {
+    if repo.pool().is_none() {
+        return;
+    }
+    let spawned = std::thread::Builder::new()
+        .name("auto-refinement".into())
+        .spawn(move || {
+            actix_web::rt::System::new().block_on(async move {
+                loop {
+                    let outcome = automatic_refinement_tick(&repo, &bins, &logs, &queue).await;
+                    if let Err(e) = outcome {
+                        eprintln!("Automatic refinement: {e}");
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
+            });
+        });
+    if let Err(e) = spawned {
+        eprintln!("Cannot start automatic refinement worker: {e}");
+    }
+}
+
+async fn automatic_refinement_tick(
+    repo: &web::Data<JobRepo>,
+    bins: &web::Data<Arc<SimcBinaries>>,
+    logs: &web::Data<Arc<LogBuffer>>,
+    queue: &web::Data<crate::compute::local::LocalSimQueue>,
+) -> Result<(), String> {
+    use sqlx::Row;
+    let Some(pool) = repo.pool() else {
+        return Ok(());
+    };
+    let rows = sqlx::query("SELECT id FROM jobs WHERE status='done' AND sim_type IN ('top_gear','droptimizer','upgrade_compare') AND request_json LIKE '%\"auto_refine_probability\":%' AND result_json NOT LIKE '%\"automatic_refinement\":%' AND result_json NOT LIKE '%\"refinement\":%' ORDER BY created_at LIMIT 32")
+        .fetch_all(pool).await.map_err(|e| e.to_string())?;
+    for row in rows {
+        let id: String = row.get("id");
+        let source = repo
+            .get(&id)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("Source disappeared")?;
+        let parsed: Option<Value> = source
+            .result_json
+            .as_deref()
+            .and_then(|r| serde_json::from_str(r).ok());
+        let Some(threshold) = automatic_threshold(source.request_json.as_deref(), parsed.as_ref())
+        else {
+            continue;
+        };
+        let child_id = format!("auto-refine-{id}");
+        let marker = if repo
+            .get_status_summary(&child_id)
+            .await
+            .map_err(|e| e.to_string())?
+            .is_some()
+        {
+            json!({"state":"started","id":child_id,"min_probability_pct":threshold})
+        } else {
+            let response = refine(
+                web::Path::from(id.clone()),
+                web::Json(RefineRequest {
+                    margin_pct: 0.0,
+                    mode: SelectionMode::Probability,
+                    min_probability_pct: threshold,
+                    automatic_id: Some(child_id.clone()),
+                }),
+                repo.clone(),
+                bins.clone(),
+                logs.clone(),
+                queue.clone(),
+            )
+            .await;
+            let success = response.status().is_success();
+            let body = actix_web::body::to_bytes(response.into_body())
+                .await
+                .map_err(|e| e.to_string())?;
+            let payload: Value = serde_json::from_slice(&body).map_err(|e| e.to_string())?;
+            if success {
+                json!({"state":"started","id":child_id,"count":payload["count"],"min_probability_pct":threshold})
+            } else {
+                let detail = payload["detail"]
+                    .as_str()
+                    .unwrap_or("Automatic refinement could not start");
+                json!({"state":if detail=="No combinations match this margin" {"skipped"} else {"failed"},"detail":detail,"min_probability_pct":threshold})
+            }
+        };
+        // Read fresh to preserve any display-data backfill performed in parallel.
+        if let Some(latest) = repo.get(&id).await.map_err(|e| e.to_string())? {
+            if let Some(mut result) = latest
+                .result_json
+                .as_deref()
+                .and_then(|r| serde_json::from_str::<Value>(r).ok())
+            {
+                result["automatic_refinement"] = marker;
+                repo.update_result_json(&id, &result.to_string())
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -468,6 +603,35 @@ mod tests {
         );
         assert!(candidates(&s, 0.0, SelectionMode::Probability, 101.0).is_err());
         assert_eq!(improvement_probability(100.0, 0.0, 100.0, 0.0), 0.5);
+    }
+    #[test]
+    fn automatic_refinement_is_opt_in_and_does_not_recurse() {
+        let request = NormalizedRequest::new(
+            "top_gear",
+            json!({"options":{"auto_refine_probability":20}}),
+        )
+        .to_json_string()
+        .unwrap();
+        assert_eq!(
+            automatic_threshold(Some(&request), Some(&source())),
+            Some(20.0)
+        );
+        assert_eq!(automatic_threshold(None, Some(&source())), None);
+        let mut refined = source();
+        refined["refinement"] = json!({"source_id":"parent"});
+        assert_eq!(automatic_threshold(Some(&request), Some(&refined)), None);
+        let mut handled = source();
+        handled["automatic_refinement"] = json!({"state":"skipped"});
+        assert_eq!(automatic_threshold(Some(&request), Some(&handled)), None);
+        let old: super::super::types::SimOptions = serde_json::from_value(json!({})).unwrap();
+        assert!(old.to_json().get("auto_refine_probability").is_none());
+        let enabled: super::super::types::SimOptions =
+            serde_json::from_value(json!({"auto_refine_probability":20})).unwrap();
+        assert_eq!(enabled.to_json()["auto_refine_probability"], 20.0);
+        assert!(serde_json::from_value::<super::super::types::SimOptions>(
+            json!({"auto_refine_probability":101})
+        )
+        .is_err());
     }
     #[test]
     fn incompatible_engine_rejected() {

@@ -28,6 +28,8 @@ export function specOverrideOf(talentString: string): string {
  */
 export function useSharedSimPayload(): Record<string, unknown> {
   const {
+    autoRefine,
+    autoRefineProbability,
     simcInput,
     folioSelections,
     threads,
@@ -62,6 +64,7 @@ export function useSharedSimPayload(): Record<string, unknown> {
   return useMemo(
     () => ({
       iterations,
+      ...(autoRefine ? { auto_refine_probability: autoRefineProbability } : {}),
       target_error: targetError,
       threads,
       ...(selectedTalent ? { talents: selectedTalent } : {}),
@@ -99,6 +102,8 @@ export function useSharedSimPayload(): Record<string, unknown> {
       ...(simcBranch ? { simc_branch: simcBranch } : {}),
     }),
     [
+      autoRefine,
+      autoRefineProbability,
       threads,
       selectedTalent,
       omniumOverride,

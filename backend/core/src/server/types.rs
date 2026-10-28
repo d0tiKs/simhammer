@@ -15,6 +15,8 @@ pub(super) struct FrontendDir(pub PathBuf);
 /// Shared simulation options common to all sim request types.
 #[derive(Debug, Deserialize)]
 pub struct SimOptions {
+    #[serde(default, deserialize_with = "deserialize_auto_refine_probability")]
+    pub auto_refine_probability: Option<f64>,
     #[serde(default = "default_iterations")]
     pub iterations: u32,
     #[serde(default = "default_fight_style")]
@@ -90,6 +92,18 @@ pub struct SimOptions {
     pub untrusted: bool,
 }
 
+fn deserialize_auto_refine_probability<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<f64>, D::Error> {
+    let value = Option::<f64>::deserialize(deserializer)?;
+    if value.is_some_and(|p| !p.is_finite() || !(0.0..=100.0).contains(&p)) {
+        return Err(serde::de::Error::custom(
+            "Automatic refinement probability must be between 0 and 100",
+        ));
+    }
+    Ok(value)
+}
+
 impl SimOptions {
     pub(super) fn has_raid_actors(&self) -> bool {
         !sanitize_custom_simc(&self.simc_raid_actors)
@@ -124,6 +138,9 @@ impl SimOptions {
         }
         if let Some(b) = self.parallel_profilesets {
             v["parallel_profilesets"] = json!(b);
+        }
+        if let Some(p) = self.auto_refine_probability {
+            v["auto_refine_probability"] = json!(p);
         }
         if let Some(n) = self.triage_max_batch_profilesets {
             v["triage_max_batch_profilesets"] = json!(n);

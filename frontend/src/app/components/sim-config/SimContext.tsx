@@ -135,6 +135,10 @@ interface SimContextType {
   // Streamed Top Gear Triage checkpoint size. Larger batches favor throughput over pause response.
   triageMaxBatchProfilesets: number;
   setTriageMaxBatchProfilesets: (v: number) => void;
+  autoRefine: boolean;
+  setAutoRefine: (value: boolean) => void;
+  autoRefineProbability: number;
+  setAutoRefineProbability: (value: number) => void;
   // Quick Sim: calculate stat weights (off by default — adds ~8× sim time).
   statWeights: boolean;
   setStatWeights: (v: boolean) => void;
@@ -212,6 +216,18 @@ export function SimProvider({ children }: { children: ReactNode }) {
   const [triageMaxBatchProfilesets, _setTriageMaxBatchProfilesets] = useState(
     DEFAULT_PROFILE_DATA.triageMaxBatchProfilesets
   );
+  const [autoRefine, _setAutoRefine] = useState(false);
+  const [autoRefineProbability, _setAutoRefineProbability] = useState(20);
+  const setAutoRefine = useCallback((value: boolean) => {
+    _setAutoRefine(value);
+    localStorage.setItem('simhammer_auto_refine', String(value));
+  }, []);
+  const setAutoRefineProbability = useCallback((value: number) => {
+    if (Number.isFinite(value) && value >= 0 && value <= 100) {
+      _setAutoRefineProbability(value);
+      localStorage.setItem('simhammer_auto_refine_probability', String(value));
+    }
+  }, []);
   const [statWeights, _setStatWeights] = useState(DEFAULT_PROFILE_DATA.statWeights);
   const [activeProfile, _setActiveProfile] = useState<SimProfile | null>(null);
   // The config's own fightStyle + scenarios while a route forces those fields.
@@ -291,6 +307,15 @@ export function SimProvider({ children }: { children: ReactNode }) {
       // the draft above is debounced — so a change made just before reload is in
       // the key but not yet in the draft.
       _setThreads(readStoredPositiveInt('simhammer_threads', DEFAULT_PROFILE_DATA.threads));
+      _setAutoRefine(localStorage.getItem('simhammer_auto_refine') === 'true');
+      const storedRefine = localStorage.getItem('simhammer_auto_refine_probability');
+      if (
+        storedRefine != null &&
+        Number.isFinite(Number(storedRefine)) &&
+        Number(storedRefine) >= 0 &&
+        Number(storedRefine) <= 100
+      )
+        _setAutoRefineProbability(Number(storedRefine));
       const storedError = localStorage.getItem('simhammer_target_error');
       if (storedError != null) {
         const n = parseFloat(storedError);
@@ -765,6 +790,10 @@ export function SimProvider({ children }: { children: ReactNode }) {
         setParallelProfilesets,
         triageMaxBatchProfilesets,
         setTriageMaxBatchProfilesets,
+        autoRefine,
+        setAutoRefine,
+        autoRefineProbability,
+        setAutoRefineProbability,
         statWeights,
         setStatWeights,
         activeProfile,

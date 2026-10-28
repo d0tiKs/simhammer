@@ -26,8 +26,16 @@ function iterationSliderIndex(value: number): number {
  *  profileset scheduling, custom APL and the expert-mode input tabs. */
 export default function AdvancedSettings() {
   const { t } = useLanguage();
-  const isTopGear = usePathname() === ROUTES.topGear;
+  const pathname = usePathname();
+  const isTopGear = pathname === ROUTES.topGear;
+  const supportsRefinement = [ROUTES.topGear, ROUTES.dropFinder, ROUTES.upgradeCompare].some(
+    (route) => route === pathname
+  );
   const {
+    autoRefine,
+    setAutoRefine,
+    autoRefineProbability,
+    setAutoRefineProbability,
     targetError,
     setTargetError,
     iterations,
@@ -188,6 +196,44 @@ export default function AdvancedSettings() {
           </p>
         </div>
       </label>
+
+      {supportsRefinement && (
+        <div className="mt-4 border-t border-line/10 pt-4">
+          <label className="flex items-center gap-2 text-sm text-on-surface">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-gold-fill"
+              checked={autoRefine}
+              onChange={(event) => setAutoRefine(event.target.checked)}
+            />
+            Automatically refine promising results
+          </label>
+          {autoRefine && (
+            <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-on-surface">
+              Minimum estimated improvement probability
+              <input
+                aria-label="Automatic refinement probability threshold"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={autoRefineProbability}
+                onChange={(event) => {
+                  if (event.target.value !== '')
+                    setAutoRefineProbability(Number(event.target.value));
+                }}
+                className="w-20 rounded border border-line/20 bg-surface px-2 py-1"
+              />
+              %
+            </label>
+          )}
+          <p className={HELP}>
+            After the initial results finish, queue one local refinement pass and save a new report.
+            The default threshold is 20%. Higher thresholds select fewer combinations. Uses
+            estimated probabilities from the reported errors.
+          </p>
+        </div>
+      )}
 
       {isTopGear && (
         <div className="space-y-2">
