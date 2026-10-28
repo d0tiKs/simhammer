@@ -199,6 +199,8 @@ pub struct JobOverviewSummary {
     pub realm: Option<String>,
     pub region: Option<String>,
     pub dps: Option<f64>,
+    pub precise_dps: Option<f64>,
+    pub precise_error_pct: Option<f64>,
     pub batch_id: Option<String>,
     pub provider_id: String,
 }
@@ -207,8 +209,36 @@ pub struct ResultSummary {
     pub player_name: Option<String>,
     pub player_class: Option<String>,
     pub dps: Option<f64>,
+    pub precise_dps: Option<f64>,
+    pub precise_error_pct: Option<f64>,
     pub realm: Option<String>,
     pub region: Option<String>,
+}
+
+/// Only achieved precision counts; requested precision alone is not evidence.
+fn precise_result(v: &serde_json::Value) -> Option<(f64, f64)> {
+    let target = v["target_error"]
+        .as_f64()
+        .filter(|p| p.is_finite() && *p > 0.0)?;
+    let qualified = |dps: Option<f64>, error: Option<f64>| -> Option<(f64, f64)> {
+        let dps = dps.filter(|d| d.is_finite() && *d > 0.0)?;
+        let error = error.filter(|p| p.is_finite() && *p >= 0.0 && *p <= target + 0.005)?;
+        Some((dps, error))
+    };
+    if v.get("dps").is_some() {
+        return qualified(v["dps"].as_f64(), v["dps_error_pct"].as_f64());
+    }
+    let mut best = qualified(v["base_dps"].as_f64(), v["dps_error_pct"].as_f64());
+    if let Some(rows) = v["results"].as_array() {
+        for row in rows {
+            if let Some(candidate) = qualified(row["dps"].as_f64(), row["precision_pct"].as_f64()) {
+                if best.is_none_or(|b| candidate.0 > b.0) {
+                    best = Some(candidate);
+                }
+            }
+        }
+    }
+    best
 }
 
 pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) -> ResultSummary {
@@ -216,16 +246,22 @@ pub fn extract_result_summary(result_json: &Option<String>, simc_input: &str) ->
         player_name: None,
         player_class: None,
         dps: None,
+        precise_dps: None,
+        precise_error_pct: None,
         realm: None,
         region: None,
     };
 
     // Two payload shapes: single-actor (Quick/Stat Weights) has top-level `dps`;
     // gear-comparison (Top Gear/Drop Finder/Crest) has `base_dps` + a `results`
-    // array. For the latter, history's "best DPS" is the max over baseline and
-    // every combo.
+    // array. Keep the legacy maximum estimate in `dps`; the overview uses
+    // `precise_dps` to avoid treating rough estimates as verified winners.
     if let Some(json_str) = result_json {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+            if let Some((dps, error)) = precise_result(&v) {
+                summary.precise_dps = Some(dps);
+                summary.precise_error_pct = Some(error);
+            }
             summary.player_name = v
                 .get("player_name")
                 .and_then(|n| n.as_str())
@@ -389,6 +425,34 @@ mod sim_mode_tests {
 mod summary_tests {
     use super::*;
 
+    #[test]
+    fn rough_and_unknown_results_cannot_be_the_precise_best() {
+        let value = serde_json::json!({"target_error":0.1,"base_dps":189000,"dps_error_pct":0.1,"results":[
+            {"dps":203000,"precision_pct":1.2},{"dps":204000},{"dps":200000,"precision_pct":0.1}]});
+        let s = extract_result_summary(&Some(value.to_string()), "");
+        assert_eq!(s.dps, Some(204000.0));
+        assert_eq!(s.precise_dps, Some(200000.0));
+        assert_eq!(s.precise_error_pct, Some(0.1));
+    }
+    #[test]
+    fn single_actor_requires_achieved_error_within_target() {
+        assert_eq!(
+            precise_result(
+                &serde_json::json!({"dps":200300,"target_error":0.05,"dps_error_pct":0.05})
+            ),
+            Some((200300.0, 0.05))
+        );
+        assert_eq!(
+            precise_result(
+                &serde_json::json!({"dps":210000,"target_error":0.05,"dps_error_pct":0.2})
+            ),
+            None
+        );
+        assert_eq!(
+            precise_result(&serde_json::json!({"dps":210000,"target_error":0.05})),
+            None
+        );
+    }
     #[test]
     fn single_actor_result_uses_top_level_dps() {
         let json = r#"{"player_name":"Alice","dps":12345.0}"#;

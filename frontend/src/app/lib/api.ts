@@ -284,6 +284,8 @@ export interface JobOverviewSummary {
   realm: string | null;
   region: string | null;
   dps: number | null;
+  precise_dps?: number | null;
+  precise_error_pct?: number | null;
   batch_id: string | null;
   provider_id: string;
 }

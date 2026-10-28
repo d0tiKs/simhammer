@@ -37,6 +37,8 @@ interface UseActiveSimsResult {
 function summariesEqual(a: JobOverviewSummary, b: JobOverviewSummary): boolean {
   return (
     a.id === b.id &&
+    a.precise_dps === b.precise_dps &&
+    a.precise_error_pct === b.precise_error_pct &&
     a.status === b.status &&
     a.progress_pct === b.progress_pct &&
     a.progress_stage === b.progress_stage &&

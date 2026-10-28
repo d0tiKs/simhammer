@@ -105,6 +105,8 @@ fn job_to_overview_summary(
         realm: s.realm,
         region: s.region,
         dps: s.dps,
+        precise_dps: s.precise_dps,
+        precise_error_pct: s.precise_error_pct,
         batch_id: j.batch_id.clone(),
         provider_id: j.provider_id.clone(),
     }
@@ -192,6 +194,8 @@ fn row_to_overview_summary(
         realm: summary.realm,
         region: summary.region,
         dps: summary.dps,
+        precise_dps: summary.precise_dps,
+        precise_error_pct: summary.precise_error_pct,
         batch_id: r.try_get("batch_id").ok().flatten(),
         provider_id: r
             .try_get("provider_id")

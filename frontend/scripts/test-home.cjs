@@ -61,3 +61,20 @@ test('recent sims are the newest finished or failed runs', () => {
     ['new', 'bad']
   );
 });
+
+const { computeSimsStats } = require('../src/app/lib/simsStats.ts');
+test('best DPS requires a named character and a precision-qualified completed result', () => {
+  const sims = [
+    {id:'rough',status:'done',player_name:'Volanok',dps:202860,precise_dps:200209,precise_error_pct:0.1},
+    {id:'quick',status:'done',player_name:'Volanok',dps:200263,precise_dps:200263,precise_error_pct:0.05},
+    {id:'unknown',status:'done',player_name:'Volanok',dps:300000},
+    {id:'anonymous',status:'done',player_name:null,precise_dps:400000,precise_error_pct:0.05},
+    {id:'running',status:'running',player_name:'Volanok',precise_dps:500000,precise_error_pct:0.05},
+  ];
+  const stats = computeSimsStats(sims);
+  assert.equal(stats.bestJob.id,'quick');
+  assert.equal(stats.bestDps,200263);
+  assert.equal(stats.completedSims,4);
+  assert.equal(stats.uniqueCharacters,1);
+  assert.equal(computeSimsStats([sims[2],sims[3],sims[4]]).bestJob,null);
+});

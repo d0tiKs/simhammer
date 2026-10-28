@@ -75,7 +75,14 @@ function HistoryRow({ job, trailing }: { job: JobOverviewSummary; trailing: Reac
       <td className={`${TD} text-right`}>
         {job.dps ? (
           <span className="font-headline text-sm font-extrabold text-on-surface">
-            {formatDps(job.dps)}
+            {formatDps(job.precise_dps ?? job.dps)}
+            {job.precise_dps == null ? (
+              <span className="ml-1 text-xs font-normal text-outline">estimate</span>
+            ) : (
+              <span className="mt-0.5 block text-xs font-normal text-outline">
+                ±{job.precise_error_pct}%
+              </span>
+            )}
           </span>
         ) : (
           <span className="text-outline">—</span>
