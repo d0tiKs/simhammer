@@ -42,8 +42,12 @@ export async function fetchArmoryCharacter(
   region: string,
   realm: string,
   name: string
-): Promise<{ simc_input: string }> {
-  return postJson<{ simc_input: string }>('/api/armory/import', { region, realm, name });
+): Promise<{ simc_input: string; missing_stats_slots?: string[] }> {
+  return postJson<{ simc_input: string; missing_stats_slots?: string[] }>('/api/armory/import', {
+    region,
+    realm,
+    name,
+  });
 }
 
 export interface SavedTalentBuild {

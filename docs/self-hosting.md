@@ -59,6 +59,44 @@ docker run -p 8000:8000 \
 
 The server auto-detects the database type from the URL prefix.
 
+## Exact Armory equipment stats
+
+Midnight catalyst items keep the source item's secondary stats. Item IDs and
+bonus IDs alone cannot reconstruct that allocation. SimHammer emits explicit
+`stats=` values when the Armory response includes Blizzard's equipment `stats`
+array, and preserves those values through gear and gem/enchant comparisons.
+
+The public `simhammer.com` proxy currently omits these values. Without them,
+the import screen warns that the equipped stats are unverified. A fresh export
+from the in-game SimulationCraft addon can carry `redirected_base_stats=` for
+catalyst gear. An Armory-generated export is not the same thing and may omit it.
+
+Self-hosted servers can fetch the missing equipment data directly from Blizzard
+with a Battle.net developer application's client credentials:
+
+| Variable | Purpose |
+|----------|---------|
+| `BLIZZARD_CLIENT_ID` | Server-side Battle.net developer client ID |
+| `BLIZZARD_CLIENT_SECRET_FILE` | Path inside the container to a mounted secret file, preferred |
+| `BLIZZARD_CLIENT_SECRET` | Alternative server environment variable when no secret file is set |
+
+Mount the secret file read-only and pass its container path. Keep credentials
+out of frontend build variables, profile text, and source control. No individual
+user login is needed. With credentials configured, an equipment/authentication
+failure is reported instead of silently falling back to unverified stats. If
+the proxy's cached gear differs from Blizzard's current gear, retry after the
+cached profile refreshes; stats from different items are never combined.
+
+No credentials are needed if the proxy is updated to forward equipment stats.
+Its `gear.items[]` entries should preserve Blizzard's `stats` array unchanged
+(`type.type`, `value`, `is_negated`) and `modified_crafting_stat` entries. Do not
+substitute character-wide totals or add gems/enchants into the item stat values.
+
+When explicitly specified stats are upgraded, SimHammer uses SimC's manual-stat
+scaling fallback, which is approximate. A newly imported equipped item retains
+its exact reported amounts. Alternative drops continue to use SimC's item data;
+the equipped item's snapshot is never copied onto a different drop.
+
 ## Build from Source
 
 ```bash

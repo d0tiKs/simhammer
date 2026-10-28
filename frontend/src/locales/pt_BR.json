@@ -1,4 +1,5 @@
 {
+  "import.armoryStatsMissing": "O Armory não forneceu os atributos exatos dos itens. Equipamentos do catalisador podem ser simulados com atributos secundários incorretos. Cole uma exportação recente do addon SimulationCraft no jogo para obter dados precisos.",
   "nav.quickSim": "SIM RÁPIDA",
   "nav.topGear": "TOP GEAR",
   "nav.dropFinder": "Drop Finder",

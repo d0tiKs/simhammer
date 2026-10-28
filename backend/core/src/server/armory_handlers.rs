@@ -1,9 +1,15 @@
 use actix_web::{web, HttpResponse};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::roster::armory_client::{ArmoryClient, ArmoryError, HttpArmoryClient};
-use crate::roster::armory_to_simc::armory_to_simc;
+use crate::roster::armory_to_simc::{armory_to_simc, missing_item_stats};
+
+#[derive(Debug, Serialize)]
+pub(super) struct ArmoryProfile {
+    simc_input: String,
+    missing_stats_slots: Vec<String>,
+}
 
 #[derive(Deserialize)]
 pub struct ArmoryImportRequest {
@@ -21,14 +27,17 @@ pub(super) async fn fetch_armory_simc(
     region: &str,
     realm: &str,
     name: &str,
-) -> Result<String, ArmoryError> {
+) -> Result<ArmoryProfile, ArmoryError> {
     let armory = client.fetch(region, realm, name).await?;
     let simc = armory_to_simc(&armory);
     let parsed = crate::addon_parser::parse_simc_input(&simc);
     if parsed.character.class_name.unwrap_or_default().is_empty() {
         return Err(ArmoryError::Http("armory data could not be parsed".into()));
     }
-    Ok(simc)
+    Ok(ArmoryProfile {
+        simc_input: simc,
+        missing_stats_slots: missing_item_stats(&armory),
+    })
 }
 
 /// POST /api/armory/import — fetch a single character from the armory and return
@@ -44,7 +53,7 @@ pub(super) async fn import_armory_character(req: web::Json<ArmoryImportRequest>)
     }
     let client = HttpArmoryClient::new();
     match fetch_armory_simc(&client, region, realm, name).await {
-        Ok(simc_input) => HttpResponse::Ok().json(json!({ "simc_input": simc_input })),
+        Ok(profile) => HttpResponse::Ok().json(profile),
         Err(ArmoryError::NotFound) => {
             HttpResponse::NotFound().json(json!({"detail": "Character not found on armory"}))
         }
@@ -91,7 +100,8 @@ mod tests {
         let simc = fetch_armory_simc(&MockOk, "eu", "Draenor", "Thrall")
             .await
             .unwrap();
-        assert!(simc.contains("id=132863"));
+        assert!(simc.simc_input.contains("id=132863"));
+        assert!(!simc.missing_stats_slots.is_empty());
     }
 
     #[tokio::test]

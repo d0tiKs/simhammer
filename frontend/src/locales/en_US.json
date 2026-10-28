@@ -1,4 +1,5 @@
 {
+  "import.armoryStatsMissing": "Armory did not provide exact item stats. Catalyst gear may simulate with the wrong secondary stats. Paste a fresh export from the in-game SimulationCraft addon for accurate gear data.",
   "nav.collapseSidebar": "Collapse",
   "nav.expandSidebar": "Expand sidebar",
   "nav.quickSim": "Quick Sim",

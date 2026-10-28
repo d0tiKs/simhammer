@@ -1,4 +1,5 @@
 {
+  "import.armoryStatsMissing": "Das Arsenal hat keine exakten Gegenstandswerte geliefert. Katalysatorausrüstung kann mit falschen Sekundärwerten simuliert werden. Füge für genaue Ausrüstungsdaten einen neuen Export des SimulationCraft-Addons aus dem Spiel ein.",
   "nav.quickSim": "SCHNELLSIM",
   "nav.topGear": "BESTE AUSR.",
   "nav.dropFinder": "Drop-Finder",

@@ -1,4 +1,5 @@
 {
+  "import.armoryStatsMissing": "L'Armeria non ha fornito le statistiche esatte degli oggetti. L'equipaggiamento del catalizzatore potrebbe essere simulato con statistiche secondarie errate. Incolla una nuova esportazione dell'addon SimulationCraft dal gioco per dati precisi.",
   "nav.quickSim": "SIM RAPIDA",
   "nav.topGear": "TOP GEAR",
   "nav.dropFinder": "Drop Finder",

@@ -39,6 +39,7 @@ export default function CharacterImport({
   const [armoryName, setArmoryName] = useState('');
   const [armoryFetching, setArmoryFetching] = useState(false);
   const [armoryError, setArmoryError] = useState('');
+  const [armoryStatsMissing, setArmoryStatsMissing] = useState(false);
   const [realmsByRegion, setRealmsByRegion] = useState<Record<string, RealmInfo[]> | null>(null);
   const [realmsError, setRealmsError] = useState(false);
 
@@ -79,14 +80,16 @@ export default function CharacterImport({
     if (!canFetch) return;
     setArmoryFetching(true);
     setArmoryError('');
+    setArmoryStatsMissing(false);
     try {
-      const { simc_input } = await fetchArmoryCharacter(
+      const { simc_input, missing_stats_slots } = await fetchArmoryCharacter(
         armoryRegion,
         armoryRealm.trim(),
         armoryName.trim()
       );
       // Drop the generated profile into the SimC box for review; Apply persists it.
       setEditValue(simc_input);
+      setArmoryStatsMissing(!!missing_stats_slots?.length);
       setImportTab('simc');
     } catch (e) {
       setArmoryError(e instanceof Error ? e.message : 'Armory fetch failed');
@@ -113,6 +116,11 @@ export default function CharacterImport({
 
       {importTab === 'simc' ? (
         <>
+          {armoryStatsMissing && (
+            <p role="status" className="text-[12px] text-warning">
+              {t('import.armoryStatsMissing')}
+            </p>
+          )}
           <textarea
             ref={textareaRef}
             value={editValue}

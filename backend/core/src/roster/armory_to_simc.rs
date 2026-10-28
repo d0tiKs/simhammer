@@ -2,6 +2,62 @@ use crate::roster::armory_client::realm_slug;
 use crate::talent_normalize::spec_id_from_loadout;
 use crate::types::class_data::{simc_class_token, spec_id_to_class, spec_id_to_name, title_case};
 use serde_json::Value;
+use std::collections::BTreeMap;
+
+/// Blizzard equipment stats, forwarded unchanged by the Armory proxy. These
+/// are the item's own stats, not the character totals or its gem/enchant stats.
+fn item_stats(item: &Value) -> Option<String> {
+    let mut stats = BTreeMap::new();
+    for stat in item.get("stats")?.as_array()? {
+        if stat.get("is_negated").and_then(Value::as_bool) == Some(true) {
+            continue;
+        }
+        let name = stat
+            .get("type")
+            .and_then(|t| t.get("type"))
+            .and_then(Value::as_str);
+        let token = match name {
+            Some("STRENGTH") => "str",
+            Some("AGILITY") => "agi",
+            Some("INTELLECT") => "int",
+            Some("STAMINA") => "sta",
+            Some("CRIT_RATING") => "crit",
+            Some("HASTE_RATING") => "haste",
+            Some("MASTERY_RATING") => "mastery",
+            Some("VERSATILITY") => "vers",
+            Some("COMBAT_RATING_SPEED" | "SPEED_RATING") => "speed",
+            Some("COMBAT_RATING_LIFESTEAL" | "LIFESTEAL_RATING") => "leech",
+            Some("COMBAT_RATING_AVOIDANCE" | "AVOIDANCE_RATING") => "avoidance",
+            Some("DODGE_RATING") => "dodge",
+            Some("PARRY_RATING") => "parry",
+            Some("ARMOR") => "armor",
+            _ => continue,
+        };
+        if let Some(value) = stat.get("value").and_then(Value::as_u64).filter(|v| *v > 0) {
+            stats.insert(token, value);
+        }
+    }
+    (!stats.is_empty()).then(|| {
+        stats
+            .iter()
+            .map(|(k, v)| format!("{v}{k}"))
+            .collect::<Vec<_>>()
+            .join("_")
+    })
+}
+
+/// Slots whose exact allocation cannot be checked against Blizzard's data.
+pub fn missing_item_stats(armory: &Value) -> Vec<String> {
+    armory
+        .get("gear")
+        .and_then(|g| g.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| item_line(item).is_some() && item_stats(item).is_none())
+        .filter_map(|item| item.get("slot").and_then(Value::as_str).map(str::to_owned))
+        .collect()
+}
 
 /// Fallback player level when the armory payload omits one. Simming a max-level
 /// character at the wrong level grossly distorts DPS (secondary-stat rating
@@ -73,6 +129,26 @@ fn item_line(item: &Value) -> Option<String> {
     let has_bonus = !bonus_ids.is_empty();
     if has_bonus {
         tokens.push(format!("bonus_id={}", bonus_ids.join("/")));
+    }
+
+    // Midnight catalyst items retain the source's allocation, which cannot be
+    // reconstructed from the tier item id and bonus ids alone. Match SimC's
+    // own Blizzard importer by overriding with the equipped item stats.
+    if let Some(stats) = item_stats(item) {
+        tokens.push(format!("stats={stats}"));
+    }
+    if let Some(context) = item.get("context").and_then(Value::as_u64) {
+        tokens.push(format!("context={context}"));
+    }
+    if let Some(crafted) = item.get("modified_crafting_stat").and_then(Value::as_array) {
+        let ids: Vec<String> = crafted
+            .iter()
+            .filter_map(value_as_id)
+            .map(|id| id.to_string())
+            .collect();
+        if !ids.is_empty() {
+            tokens.push(format!("crafted_stats={}", ids.join("/")));
+        }
     }
 
     // enchant_id — `enchants` is an array of {id,name}; take the first (permanent)
@@ -184,6 +260,71 @@ pub fn armory_to_simc(armory: &Value) -> String {
 mod tests {
     use super::*;
     use serde_json::{json, Value};
+
+    #[test]
+    fn preserves_equipped_catalyst_stats_not_tier_template() {
+        // Values from the Raidbots Spinjutsu reproduction, expressed using
+        // Blizzard's equipment-stat schema. Crit on the tier template is wrong
+        // for this equipped catalyst piece.
+        let item = json!({
+            "slot":"HEAD", "itemId":271456, "itemLevel":334, "context":95,
+            "bonusIds":[13334,6652,12854,14049,13696,13692,13698,1587],
+            "stats":[
+                {"type":{"type":"STRENGTH"},"value":189},
+                {"type":{"type":"AGILITY"},"value":189,"is_negated":true},
+                {"type":{"type":"STAMINA"},"value":3910},
+                {"type":{"type":"HASTE_RATING"},"value":60},
+                {"type":{"type":"MASTERY_RATING"},"value":141},
+                {"type":{"type":"UNKNOWN"},"value":999}
+            ],
+            "enchants":[{"id":8017}], "gems":[240898,240890]
+        });
+        let line = item_line(&item).unwrap();
+        assert!(
+            line.contains(",stats=60haste_141mastery_3910sta_189str"),
+            "{line}"
+        );
+        assert!(line.contains(",context=95"));
+        assert!(line.contains(",enchant_id=8017"));
+        assert!(line.contains(",gem_id=240898/240890"));
+        assert!(!line.contains("agi"));
+        assert!(!line.contains("ilevel="));
+        assert!(missing_item_stats(&json!({"gear":{"items":[item]}})).is_empty());
+    }
+
+    #[test]
+    fn missing_stats_remain_missing_instead_of_fabricated() {
+        let armory = json!({"gear":{"items":[
+            {"slot":"HEAD","itemId":271456,"stats":[]},
+            {"slot":"SHIRT","itemId":98080},
+            {"slot":"NECK","itemId":268265,"stats":[{"type":{"type":"UNKNOWN"},"value":50}]}
+        ]}});
+        assert_eq!(missing_item_stats(&armory), vec!["HEAD", "NECK"]);
+        assert!(!armory_to_simc(&armory).contains("stats="));
+    }
+
+    #[test]
+    fn retains_crafted_stat_choices() {
+        let line = item_line(&json!({
+            "slot":"WRIST","itemId":237834,
+            "modified_crafting_stat":[{"id":32},{"id":36}]
+        }))
+        .unwrap();
+        assert!(line.contains(",crafted_stats=32/36"));
+    }
+
+    #[test]
+    fn retains_blizzard_tertiary_stats() {
+        let item = json!({"stats":[
+            {"type":{"type":"COMBAT_RATING_SPEED"},"value":17},
+            {"type":{"type":"COMBAT_RATING_LIFESTEAL"},"value":23},
+            {"type":{"type":"COMBAT_RATING_AVOIDANCE"},"value":11}
+        ]});
+        assert_eq!(
+            item_stats(&item).as_deref(),
+            Some("11avoidance_23leech_17speed")
+        );
+    }
 
     fn load(name: &str) -> Value {
         let p = format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name);

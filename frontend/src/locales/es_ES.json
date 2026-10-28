@@ -1,4 +1,5 @@
 {
+  "import.armoryStatsMissing": "La Armería no ha proporcionado las estadísticas exactas de los objetos. El equipo del catalizador puede simularse con estadísticas secundarias incorrectas. Pega una exportación reciente del addon SimulationCraft del juego para obtener datos precisos.",
   "nav.quickSim": "SIM RÁPIDA",
   "nav.topGear": "MEJOR EQUIPO",
   "nav.dropFinder": "Buscador de Botín",

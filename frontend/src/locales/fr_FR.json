@@ -1,4 +1,5 @@
 {
+  "import.armoryStatsMissing": "L'Armurerie n'a pas fourni les statistiques exactes des objets. Les objets du catalyseur peuvent être simulés avec de mauvaises statistiques secondaires. Collez un nouvel export de l'addon SimulationCraft en jeu pour obtenir des données exactes.",
   "nav.quickSim": "SIM RAPIDE",
   "nav.topGear": "TOP GEAR",
   "nav.dropFinder": "Butin",
