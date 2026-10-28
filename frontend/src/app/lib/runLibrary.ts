@@ -98,7 +98,6 @@ export function scenarioDifferences(job: JobOverviewSummary, peers: JobOverviewS
         for (const [part, detail] of Object.entries(value)) entries[part] = detail;
       } else entries[key] = value;
     }
-    entries['SimC revision'] = j.scenario?.simc_revision;
     return entries;
   };
   const sameLabel = peers.filter((j) => scenarioLabel(j) === scenarioLabel(job));
