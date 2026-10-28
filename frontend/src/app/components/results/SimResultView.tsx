@@ -106,7 +106,7 @@ export default function SimResultView({
         elapsedTime={result.total_elapsed_seconds ?? result.elapsed_time_seconds}
         baseDps={result.base_dps}
         topAction={headerActions}
-        aside={result.setup ? <SimSetup setup={result.setup} /> : undefined}
+        aside={result.setup ? <SimSetup setup={result.setup} align="left" /> : undefined}
       />
       {talents}
       {result.equipped_gear && Object.keys(result.equipped_gear).length > 0 ? (

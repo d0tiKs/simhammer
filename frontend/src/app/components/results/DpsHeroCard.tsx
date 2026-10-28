@@ -1,5 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
+import { getCharacterRenderUrl } from '../gear/topGearResultsUtils';
+import { useTrimmedRender } from '../gear/useTrimmedRender';
 import { API_URL } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import { useRealmSlug } from '../../lib/realms';
@@ -77,6 +79,9 @@ export default function DpsHeroCard({
 
   const realmSlug = useRealmSlug(playerRealm);
   const faction = useFaction(realmSlug, playerName, playerRegion);
+  const characterRenderUrl = getCharacterRenderUrl(realmSlug, playerName, playerRegion);
+  const characterRender = useTrimmedRender(characterRenderUrl);
+  const showCharacter = characterRender.status === 'trimmed' || characterRender.status === 'full';
 
   return (
     <section
@@ -114,33 +119,58 @@ export default function DpsHeroCard({
       {topAction && <div className="absolute right-6 top-6 z-20 flex gap-2">{topAction}</div>}
 
       <div className="relative z-10 px-9 pb-[30px] pt-[34px]">
-        <h1 className="font-headline text-[34px] font-extrabold uppercase leading-none tracking-[-0.01em] text-on-surface">
-          {playerName}
-          {playerRealm ? `-${playerRealm}` : ''}
-        </h1>
-        <p className="mt-2.5 font-headline text-[13px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
-          {playerClass}
-        </p>
-        <div className="mt-[26px] flex items-baseline gap-2.5">
-          <span className="font-headline text-[92px] font-extrabold tabular-nums leading-[0.9] tracking-[-0.03em] text-gold [text-shadow:0_0_60px_rgb(var(--c-primary)/var(--hero-glow-a))]">
-            {Math.round(dps).toLocaleString()}
-          </span>
-          <span className="font-headline text-xl font-extrabold tracking-[0.04em] text-gold-dark">
-            {t('results.dps')}
-          </span>
-        </div>
-        {dpsDelta != null && dpsDeltaPct != null && (
-          <div className="mt-3.5">
-            <Pill variant={dpsDelta >= 0 ? 'positive' : 'negative'}>
-              {dpsDelta >= 0 ? '▲' : '▼'} {Math.abs(dpsDeltaPct).toFixed(1)}%{' '}
-              {t('results.vsPreviousSim')}
-            </Pill>
+        {showCharacter && characterRenderUrl && (
+          <div
+            className="pointer-events-none absolute bottom-4 right-3 top-[72px] w-[28%]"
+            aria-label={`${playerName}'s current Armory appearance`}
+          >
+            <img
+              src={characterRender.status === 'trimmed' ? characterRender.src : characterRenderUrl}
+              alt={`${playerName}'s current Armory appearance`}
+              className="h-full w-full object-contain object-right [filter:drop-shadow(0_8px_16px_rgba(0,0,0,0.4))]"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
           </div>
         )}
-        {children}
-        {aside && (
-          <div className="mt-6 lg:absolute lg:bottom-[30px] lg:right-9 lg:mt-0">{aside}</div>
-        )}
+        <div className="relative z-10">
+          <h1 className="font-headline text-[34px] font-extrabold uppercase leading-none tracking-[-0.01em] text-on-surface">
+            {playerName}
+            {playerRealm ? `-${playerRealm}` : ''}
+          </h1>
+          <p className="mt-2.5 font-headline text-[13px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
+            {playerClass}
+          </p>
+          <div className="mt-[26px] flex items-baseline gap-2.5">
+            <span className="font-headline text-[92px] font-extrabold tabular-nums leading-[0.9] tracking-[-0.03em] text-gold [text-shadow:0_0_60px_rgb(var(--c-primary)/var(--hero-glow-a))]">
+              {Math.round(dps).toLocaleString()}
+            </span>
+            <span className="font-headline text-xl font-extrabold tracking-[0.04em] text-gold-dark">
+              {t('results.dps')}
+            </span>
+          </div>
+          {dpsDelta != null && dpsDeltaPct != null && (
+            <div className="mt-3.5">
+              <Pill variant={dpsDelta >= 0 ? 'positive' : 'negative'}>
+                {dpsDelta >= 0 ? '▲' : '▼'} {Math.abs(dpsDeltaPct).toFixed(1)}%{' '}
+                {t('results.vsPreviousSim')}
+              </Pill>
+            </div>
+          )}
+          {children}
+          {aside && (
+            <div
+              className={
+                showCharacter
+                  ? 'mt-6 w-fit max-w-[66%]'
+                  : 'mt-6 lg:absolute lg:bottom-[30px] lg:right-0 lg:mt-0'
+              }
+            >
+              {aside}
+            </div>
+          )}
+        </div>
       </div>
 
       {hasMetadata && (

@@ -101,8 +101,10 @@ function BuffIcon({ buffKey, on }: { buffKey: string; on: boolean }) {
 export default function SimSetup({
   setup,
   swapped,
+  align = 'right',
 }: {
   setup: SimSetup;
+  align?: 'left' | 'right';
   swapped?: Record<string, string>;
 }) {
   const { t } = useLanguage();
@@ -127,7 +129,9 @@ export default function SimSetup({
   const buffs = [...known, ...extra];
 
   return (
-    <div className="grid gap-3.5 lg:justify-items-end lg:text-right">
+    <div
+      className={`grid gap-3.5 ${align === 'right' ? 'lg:justify-items-end lg:text-right' : ''}`}
+    >
       <div>
         <span className="lbl block">
           {t('config.consumables')}
@@ -137,7 +141,9 @@ export default function SimSetup({
             </span>
           )}
         </span>
-        <div className="mt-2 flex flex-wrap items-center gap-[7px] lg:justify-end">
+        <div
+          className={`mt-2 flex flex-wrap items-center gap-[7px] ${align === 'right' ? 'lg:justify-end' : ''}`}
+        >
           {CONSUMABLE_ORDER.map((key) => (
             <ConsumableIcon
               key={key}
@@ -151,7 +157,9 @@ export default function SimSetup({
       {buffs.length > 0 && (
         <div>
           <span className="lbl block">{t('config.raidBuffs')}</span>
-          <div className="mt-2 flex flex-wrap items-center gap-[5px] lg:justify-end">
+          <div
+            className={`mt-2 flex flex-wrap items-center gap-[5px] ${align === 'right' ? 'lg:justify-end' : ''}`}
+          >
             {buffs.map((key) => (
               <BuffIcon key={key} buffKey={key} on={setup.raid_buffs[key]} />
             ))}
