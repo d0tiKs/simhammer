@@ -13,6 +13,7 @@ import {
 import { isActiveStatus, useActiveSims } from '../lib/useActiveSims';
 import { useSimContext } from '../components/sim-config/SimContext';
 import { blizzardRealmSlug, parseCharacterInfo } from '../lib/character';
+import { getCharacters } from '../lib/saved-characters';
 import { useLanguage } from '../lib/i18n';
 import { ActiveView } from './_components/ActiveView';
 import { AllView } from './_components/AllView';
@@ -21,6 +22,10 @@ import PageHeader from '../components/ui/PageHeader';
 import ToggleButtonGroup from '../components/ui/ToggleButtonGroup';
 
 type ViewMode = 'active' | 'all';
+
+type CharacterFilter = { name: string; realm: string | null; region?: string | null };
+const characterKey = (value: CharacterFilter) =>
+  JSON.stringify([value.name.toLowerCase(), blizzardRealmSlug(value.realm ?? '')]);
 
 export default function SimsPage() {
   const { t } = useLanguage();
@@ -35,12 +40,53 @@ export default function SimsPage() {
   const [allLoading, setAllLoading] = useState(true);
   const [allError, setAllError] = useState<string | null>(null);
   const character = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
-  const [showAllCharacters, setShowAllCharacters] = useState(false);
-  useEffect(
-    () => setShowAllCharacters(false),
-    [character?.name, character?.realm, character?.region]
-  );
-  const filterCharacter = showAllCharacters ? null : character;
+  const [filterCharacter, setFilterCharacter] = useState<CharacterFilter | null>(character);
+  const [knownCharacters, setKnownCharacters] = useState<CharacterFilter[]>([]);
+  useEffect(() => {
+    setFilterCharacter(character);
+    // Only a change of character in the header resets the local selector.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [character?.name, character?.realm, character?.region]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getCharacters(), fetchAllJobs().catch(() => [])])
+      .then(([saved, jobs]) => {
+        if (cancelled) return;
+        setKnownCharacters([
+          ...saved,
+          ...jobs
+            .filter((job) => job.player_name)
+            .map((job) => ({
+              name: job.player_name!,
+              realm: job.realm,
+              region: job.region,
+            })),
+        ]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const characterOptions = useMemo(() => {
+    const options = new Map<string, CharacterFilter>();
+    for (const entry of [
+      ...knownCharacters,
+      ...activeSnapshot
+        .filter((job) => job.player_name)
+        .map((job) => ({
+          name: job.player_name!,
+          realm: job.realm,
+          region: job.region,
+        })),
+      ...(character ? [character] : []),
+      ...(filterCharacter ? [filterCharacter] : []),
+    ])
+      options.set(characterKey(entry), entry);
+    return [...options.values()].sort((a, b) =>
+      `${a.name}-${a.realm}`.localeCompare(`${b.name}-${b.realm}`)
+    );
+  }, [knownCharacters, activeSnapshot, character, filterCharacter]);
   const [view, setView] = useState<ViewMode>('active');
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -52,7 +98,9 @@ export default function SimsPage() {
       (job.player_name?.toLowerCase() === filterCharacter.name.toLowerCase() &&
         (!filterCharacter.realm ||
           blizzardRealmSlug(job.realm ?? '') === blizzardRealmSlug(filterCharacter.realm)) &&
-        (!job.region || job.region.toLowerCase() === filterCharacter.region.toLowerCase())),
+        (!job.region ||
+          !filterCharacter.region ||
+          job.region.toLowerCase() === filterCharacter.region.toLowerCase())),
     [filterCharacter]
   );
 
@@ -203,15 +251,19 @@ export default function SimsPage() {
         Character
         <select
           className="rounded border border-outline/30 bg-surface-container px-3 py-2 text-on-surface"
-          value={showAllCharacters || !character ? 'all' : 'selected'}
-          onChange={(event) => setShowAllCharacters(event.target.value === 'all')}
+          value={filterCharacter ? characterKey(filterCharacter) : 'all'}
+          onChange={(event) =>
+            setFilterCharacter(
+              characterOptions.find((entry) => characterKey(entry) === event.target.value) ?? null
+            )
+          }
         >
-          {character && (
-            <option value="selected">
-              {character.name}
-              {character.realm ? `-${character.realm}` : ''} (selected above)
+          {characterOptions.map((entry) => (
+            <option key={characterKey(entry)} value={characterKey(entry)}>
+              {entry.name}
+              {entry.realm ? `-${entry.realm}` : ''}
             </option>
-          )}
+          ))}
           <option value="all">All characters</option>
         </select>
         <span>{mergedJobs.length} runs</span>
