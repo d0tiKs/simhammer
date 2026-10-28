@@ -181,6 +181,29 @@ test('every density has complete row metrics and layout entries', () => {
 
 const { buildResolvedCopy } = require('../src/app/components/gear/topGearIdentity.ts');
 
+test('same tier item with different retained stats keeps a distinct identity after copying', () => {
+  const item = {
+    item_id: 271456,
+    bonus_ids: [12854],
+    origin: 'equipped',
+    slot: 'head',
+    simc_string: ',id=271456,stats=189str_60haste_141mastery',
+  };
+  const first = buildResolvedCopy(item, { origin: 'bags' });
+  const reordered = buildResolvedCopy(item, {
+    origin: 'bags',
+    simc_string: ',id=271456,stats=141mastery_189str_60haste',
+  });
+  const different = buildResolvedCopy(item, {
+    origin: 'bags',
+    simc_string: ',id=271456,stats=189str_140crit_61haste',
+  });
+  assert.equal(first.uid, reordered.uid);
+  assert.notEqual(first.uid, different.uid);
+  assert.equal(first.simc_string, item.simc_string);
+});
+
+
 test('buildResolvedCopy keeps the source segment on owned catalysed gear', () => {
   const owned = {
     uid: '250042::equipped:head:249629',

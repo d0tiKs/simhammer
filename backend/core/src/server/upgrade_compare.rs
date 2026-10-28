@@ -148,7 +148,9 @@ fn prepare_upgrade_compare(
                         )
                     })
                     .to_string();
-                upgraded["simc_string"] = json!(new_simc);
+                upgraded["simc_string"] = json!(crate::item_db::rescale_stats_after_bonus_change(
+                    simc, &new_simc
+                ));
 
                 // Resolve new ilevel
                 let item_id = equipped

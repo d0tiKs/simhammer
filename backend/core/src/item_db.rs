@@ -2009,7 +2009,7 @@ pub fn upgrade_simc_input_to_rank(simc_input: &str, rank: u64) -> String {
     if rank == 0 {
         return simc_input.to_string();
     }
-    RE_BONUS_ID
+    let upgraded = RE_BONUS_ID
         .replace_all(simc_input, |caps: &regex::Captures| {
             let raw = &caps[1];
             let sep = if raw.contains('/') { "/" } else { ":" };
@@ -2020,11 +2020,12 @@ pub fn upgrade_simc_input_to_rank(simc_input: &str, rank: u64) -> String {
                 .collect::<Vec<_>>();
             format!("bonus_id={}", ids.join(sep))
         })
-        .to_string()
+        .to_string();
+    rescale_profile_stats(simc_input, &upgraded)
 }
 
 pub fn upgrade_simc_input(simc_input: &str) -> String {
-    RE_BONUS_ID
+    let upgraded = RE_BONUS_ID
         .replace_all(simc_input, |caps: &regex::Captures| {
             let raw = &caps[1];
             let sep = if raw.contains('/') { "/" } else { ":" };
@@ -2042,7 +2043,35 @@ pub fn upgrade_simc_input(simc_input: &str) -> String {
                     .join(sep)
             )
         })
-        .to_string()
+        .to_string();
+    rescale_profile_stats(simc_input, &upgraded)
+}
+
+fn rescale_profile_stats(before: &str, after: &str) -> String {
+    before
+        .split_inclusive('\n')
+        .zip(after.split_inclusive('\n'))
+        .map(|(old, new)| rescale_stats_after_bonus_change(old, new))
+        .collect()
+}
+
+/// Rebase fixed stats only when an upgrade changed the item's level. A gem or
+/// enchant edit, unrelated bonus edit, or already-maxed item must be a no-op.
+pub(crate) fn rescale_stats_after_bonus_change(before: &str, after: &str) -> String {
+    use crate::simc_string::{extract_bonus_ids, extract_item_id, item_option, rescale_item_stats};
+    if before == after || item_option(before, "stats").is_none() {
+        return after.to_string();
+    }
+    let id = extract_item_id(before);
+    let old_level = item_option(before, "ilevel")
+        .or_else(|| item_option(before, "ilvl"))
+        .and_then(|v| v.parse().ok())
+        .or_else(|| get_item_info(id, Some(&extract_bonus_ids(before))).map(|i| i.ilevel))
+        .unwrap_or(0);
+    let new_level = get_item_info(id, Some(&extract_bonus_ids(after)))
+        .map(|i| i.ilevel)
+        .unwrap_or(0);
+    rescale_item_stats(after, old_level, new_level)
 }
 
 pub fn upgrade_items_by_slot(
@@ -2082,7 +2111,8 @@ pub fn upgrade_items_by_slot(
                             )
                         })
                         .to_string();
-                    updated["simc_string"] = serde_json::json!(new_simc);
+                    updated["simc_string"] =
+                        serde_json::json!(rescale_stats_after_bonus_change(simc, &new_simc));
                 }
 
                 let item_id = item.get("item_id").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -2968,6 +2998,23 @@ mod tests {
         let out = upgrade_simc_input_to_rank(mixed, 6);
         assert!(out.contains("13668"), "socket bonus must survive: {out}");
         assert!(out.contains("12846"), "upgrade bonus must move: {out}");
+    }
+
+    #[test]
+    fn upgrades_rebase_explicit_stats_and_leave_the_original_profile_intact() {
+        crate::test_support::ensure_game_data_loaded();
+        let profile = "warrior=t\nhead=,id=271456,bonus_id=12843,stats=189str_3910sta_60haste_141mastery,enchant_id=8017,gem_id=240898\n";
+        let upgraded = upgrade_simc_input_to_rank(profile, 6);
+        assert!(upgraded.contains("bonus_id=12846"));
+        assert!(
+            !upgraded.contains("stats=189str_3910sta_60haste_141mastery"),
+            "{upgraded}"
+        );
+        assert!(upgraded.contains("haste_") && upgraded.contains("mastery,"));
+        assert!(upgraded.contains("enchant_id=8017,gem_id=240898"));
+        assert_eq!(upgrade_simc_input_to_rank(profile, 0), profile);
+        let already_max = profile.replace("12843", "12846");
+        assert_eq!(upgrade_simc_input(&already_max), already_max);
     }
 
     /// Each track maxes on its own terms, so one rank spans them all.

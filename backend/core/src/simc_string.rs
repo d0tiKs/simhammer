@@ -129,9 +129,94 @@ pub fn extract_redirected_base_stats(simc: &str) -> u64 {
         .unwrap_or(0)
 }
 
+/// Exact option lookup: `stats` must not match `crafted_stats` or
+/// `redirected_base_stats`.
+pub fn item_option<'a>(simc: &'a str, key: &str) -> Option<&'a str> {
+    simc.split(',').find_map(|part| {
+        let (name, value) = part.trim().split_once('=')?;
+        (name == key).then_some(value)
+    })
+}
+
+/// Distinguish two catalyst snapshots whose item and bonus ids are identical
+/// but whose retained secondary allocations differ. Order is not identity.
+pub fn item_stats_suffix(simc: &str) -> String {
+    let Some(stats) = item_option(simc, "stats").filter(|s| !s.is_empty()) else {
+        return String::new();
+    };
+    let mut tokens: Vec<&str> = stats.trim().split('_').collect();
+    tokens.sort_unstable();
+    format!(":stats:{}", tokens.join("_"))
+}
+
+/// Preserve the equipped allocation when changing item level. Explicit stats
+/// override the item database, so changing bonus ids alone leaves them frozen.
+/// Use SimC's documented manual-stat fallback coefficient (1.15 per 15 ilvls),
+/// including its floor rounding. This is approximate, as in SimC, not a fresh
+/// Blizzard item-stat snapshot. Gems and enchants are separate and never scaled.
+pub fn rescale_item_stats(simc: &str, old_level: u64, new_level: u64) -> String {
+    if old_level == 0
+        || new_level == 0
+        || old_level == new_level
+        || item_option(simc, "stats").is_none()
+    {
+        return simc.to_string();
+    }
+    let coefficient = 1.15_f64.powf((new_level as f64 - old_level as f64) / 15.0);
+    simc.split(',')
+        .map(|part| {
+            if let Some(value) = part.strip_prefix("stats=") {
+                let scaled = value
+                    .split('_')
+                    .map(|stat| {
+                        let end = stat
+                            .find(|c: char| !c.is_ascii_digit())
+                            .unwrap_or(stat.len());
+                        let (amount, name) = stat.split_at(end);
+                        // SimC does not scale corruption and corruption resistance.
+                        if name.is_empty() || matches!(name, "corruption" | "corruption_resistance")
+                        {
+                            return stat.to_string();
+                        }
+                        match amount.parse::<u64>() {
+                            Ok(n) => format!("{}{name}", (n as f64 * coefficient).floor() as u64),
+                            Err(_) => stat.to_string(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("_");
+                format!("stats={scaled}")
+            } else if part.starts_with("ilevel=") || part.starts_with("ilvl=") {
+                format!("ilevel={new_level}")
+            } else {
+                part.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 #[cfg(test)]
 mod gem_tests {
     use super::*;
+
+    #[test]
+    fn explicit_stats_scale_with_level_without_touching_gems_or_enchants() {
+        let s = ",id=271456,ilevel=300,stats=100str_200sta_60haste_141mastery,enchant_id=8017,gem_id=1/2,crafted_stats=36/49,redirected_base_stats=251199";
+        let scaled = rescale_item_stats(s, 300, 315);
+        assert!(scaled.contains("ilevel=315"));
+        assert!(
+            scaled.contains("stats=114str_229sta_69haste_162mastery"),
+            "{scaled}"
+        );
+        assert!(scaled.contains(
+            "enchant_id=8017,gem_id=1/2,crafted_stats=36/49,redirected_base_stats=251199"
+        ));
+        assert_eq!(rescale_item_stats(s, 300, 300), s);
+        assert_eq!(rescale_item_stats(s, 0, 315), s);
+        let no_stats = ",id=100,crafted_stats=36/49,redirected_base_stats=251199";
+        assert_eq!(rescale_item_stats(no_stats, 300, 315), no_stats);
+    }
 
     #[test]
     fn set_gem_ids_emits_slash_separated_for_multi() {

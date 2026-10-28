@@ -51,6 +51,7 @@ fn make_uid(item: &RawParsedItem) -> String {
         item.raw_slot
     );
     uid.push_str(&source_suffix(item.source_item_id));
+    uid.push_str(&crate::simc_string::item_stats_suffix(&item.simc_string));
     if item.manual {
         uid.push_str(&manual_suffix(&item.simc_string));
     }
@@ -80,6 +81,7 @@ fn dedup_key(item: &RawParsedItem) -> String {
     if item.source_item_id > 0 {
         key.push_str(&format!(":s:{}", item.source_item_id));
     }
+    key.push_str(&crate::simc_string::item_stats_suffix(&item.simc_string));
     if item.manual {
         key.push_str(&manual_suffix(&item.simc_string));
     }
@@ -507,6 +509,11 @@ pub fn build_catalyst_item(
         true,
         source.item_id,
     ));
+    // An imported catalyst source may itself carry an Armory stat snapshot.
+    // The conversion preserves that allocation at the same item level.
+    if let Some(stats) = crate::simc_string::item_option(&source.simc_string, "stats") {
+        simc_parts.push(format!(",stats={stats}"));
+    }
     if source.enchant_id > 0 {
         simc_parts.push(format!(",enchant_id={}", source.enchant_id));
     }
@@ -536,7 +543,7 @@ pub fn build_catalyst_item(
         .join(":");
     // Source id included: two sources convert to the same tier piece but keep
     // their own secondaries, so they are distinct items.
-    let uid = format!(
+    let mut uid = format!(
         "{}:{}:{}:{}:{}",
         tier_item_id,
         bonus_key,
@@ -544,6 +551,7 @@ pub fn build_catalyst_item(
         slot,
         source.item_id
     );
+    uid.push_str(&crate::simc_string::item_stats_suffix(&new_simc));
 
     ResolvedItem {
         uid,
@@ -610,12 +618,13 @@ pub fn build_modified_item(
         .collect::<Vec<_>>()
         .join(":");
     let uid = format!(
-        "{}:{}:{}:{}{}{}",
+        "{}:{}:{}:{}{}{}{}",
         source.item_id,
         bonus_key,
         ItemOrigin::Bags.as_str(),
         source.slot,
         source_suffix(source.source_item_id),
+        crate::simc_string::item_stats_suffix(&new_simc),
         manual_suffix(&new_simc)
     );
 
@@ -830,6 +839,7 @@ pub fn build_void_forge_item(source: &ResolvedItem) -> Option<ResolvedItem> {
     let new_simc = bonus_id_re
         .replace(&source.simc_string, format!("bonus_id={}", bonus_id_str))
         .to_string();
+    let new_simc = crate::simc_string::rescale_item_stats(&new_simc, source.ilevel, ilevel);
 
     // Compute fresh uid based on the NEW bonus_ids — must match the frontend's
     // deterministic format (itemId:sortedBonusIds:origin:slot). Inheriting the
@@ -840,13 +850,14 @@ pub fn build_void_forge_item(source: &ResolvedItem) -> Option<ResolvedItem> {
         .map(|b| b.to_string())
         .collect::<Vec<_>>()
         .join(":");
-    let uid = format!(
+    let mut uid = format!(
         "{}:{}:{}:{}",
         source.item_id,
         bonus_key,
         source.origin.as_str(),
         source.slot
     );
+    uid.push_str(&crate::simc_string::item_stats_suffix(&new_simc));
 
     Some(ResolvedItem {
         uid,
@@ -1131,6 +1142,14 @@ mod catalyst_tests {
             "catalyst simc string must redirect base stats to the source item, got: {}",
             catalyst.simc_string
         );
+        let mut snapshot_source = source.clone();
+        snapshot_source
+            .simc_string
+            .push_str(",stats=189str_3910sta_60haste_141mastery");
+        let snapshot_catalyst = build_catalyst_item(&snapshot_source, tier, "head");
+        assert!(snapshot_catalyst
+            .simc_string
+            .contains(",stats=189str_3910sta_60haste_141mastery"));
         assert!(
             catalyst
                 .simc_string
@@ -1138,6 +1157,26 @@ mod catalyst_tests {
             "catalyst simc string keeps the tier item id, got: {}",
             catalyst.simc_string
         );
+    }
+
+    #[test]
+    fn different_equipped_stat_snapshots_are_distinct_items() {
+        ensure_game_data_loaded();
+        let profile = "warrior=test\nspec=fury\nhead=,id=271456,stats=189str_60haste_141mastery\n# head=,id=271456,stats=189str_140crit_61haste\n";
+        let parsed = crate::addon_parser::parse_simc_input(profile);
+        let resolved = resolve_gear(&parsed);
+        let head = &resolved.slots["head"];
+        let equipped = head.equipped.as_ref().unwrap();
+        assert_eq!(head.alternatives.len(), 1);
+        assert_ne!(equipped.uid, head.alternatives[0].uid);
+        assert!(equipped.simc_string.contains("60haste_141mastery"));
+        let edited = build_modified_item(equipped, &[240898], 8017);
+        let roundtrip = format!("{profile}# manual.head={}\n", edited.simc_string);
+        let again = resolve_gear(&crate::addon_parser::parse_simc_input(&roundtrip));
+        assert!(again.slots["head"]
+            .alternatives
+            .iter()
+            .any(|i| i.uid == edited.uid));
     }
 
     #[test]

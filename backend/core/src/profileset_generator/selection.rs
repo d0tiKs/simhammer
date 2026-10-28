@@ -47,12 +47,17 @@ fn make_item_uid(item: &Value) -> String {
         .unwrap_or("bags");
     let slot = item.get("slot").and_then(|v| v.as_str()).unwrap_or("");
     format!(
-        "{}:{}:{}:{}{}",
+        "{}:{}:{}:{}{}{}",
         item_id,
         sorted_bonus_key(item),
         origin,
         slot,
-        catalyst_source_suffix(item)
+        catalyst_source_suffix(item),
+        crate::simc_string::item_stats_suffix(
+            item.get("simc_string")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        )
     )
 }
 
@@ -68,11 +73,16 @@ fn make_item_identity(item: &Value) -> String {
         .and_then(|v| v.as_str())
         .unwrap_or("bags");
     format!(
-        "{}:{}:{}{}",
+        "{}:{}:{}{}{}",
         item_id,
         sorted_bonus_key(item),
         origin,
-        catalyst_source_suffix(item)
+        catalyst_source_suffix(item),
+        crate::simc_string::item_stats_suffix(
+            item.get("simc_string")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        )
     )
 }
 

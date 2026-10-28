@@ -446,6 +446,23 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     #[test]
+    fn equipped_stats_survive_profilesets_without_leaking_onto_a_drop() {
+        ensure_game_data_loaded();
+        let profile = "warrior=test\nspec=fury\nhead=,id=271456,stats=189str_3910sta_60haste_141mastery\nmain_hand=,id=268213\n";
+        let drops = vec![
+            json!({"item_id":271456,"ilevel":347,"name":"Different drop","inventory_type":1,"bonus_ids":[12854]}),
+        ];
+        let (input, count, _) = generate_droptimizer_input(profile, &drops, None, &HashMap::new());
+        assert!(count > 0);
+        assert!(input.contains("head=,id=271456,stats=189str_3910sta_60haste_141mastery"));
+        let alternative = input
+            .lines()
+            .find(|l| l.starts_with("profileset.") && l.contains("+=head="))
+            .unwrap();
+        assert!(!alternative.contains("stats="), "{alternative}");
+    }
+
+    #[test]
     fn droptimizer_generator_emits_head_drop_combo() {
         crate::test_support::ensure_game_data_loaded();
         let base_profile = "\
