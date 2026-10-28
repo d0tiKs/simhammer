@@ -445,23 +445,27 @@ export default function SimResultClient() {
 
       {/* Input preview (lazy-loaded on demand) */}
       <div className="card overflow-hidden">
-        <button
-          onClick={handleToggleInputPreview}
-          className="flex w-full items-center justify-between px-6 py-3 text-left transition-colors hover:bg-overlay/[0.015]"
-        >
-          <span className="lbl">SimC Input</span>
-          <svg
-            className={`h-3.5 w-3.5 text-outline transition-transform ${showInputPreview ? 'rotate-180' : ''}`}
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <div className="flex items-center gap-3 pr-4">
+          <button
+            onClick={handleToggleInputPreview}
+            aria-expanded={showInputPreview}
+            className="flex min-w-0 flex-1 items-center justify-between py-3 pl-6 pr-2 text-left transition-colors hover:bg-overlay/[0.015]"
           >
-            <path d="M4 6l4 4 4-4" />
-          </svg>
-        </button>
+            <span className="lbl">SimC Input</span>
+            <svg
+              className={`h-3.5 w-3.5 text-outline transition-transform ${showInputPreview ? 'rotate-180' : ''}`}
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 6l4 4 4-4" />
+            </svg>
+          </button>
+          <CopySimcInputButton jobId={id} />
+        </div>
         {showInputPreview && (
           <div className="border-t border-line/[0.06] bg-surface-container-low p-4">
             {inputPreviewError ? (
