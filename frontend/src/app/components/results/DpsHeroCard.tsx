@@ -118,22 +118,23 @@ export default function DpsHeroCard({
       )}
       {topAction && <div className="absolute right-6 top-6 z-20 flex gap-2">{topAction}</div>}
 
+      {showCharacter && characterRenderUrl && (
+        <div
+          className="pointer-events-none absolute -bottom-8 right-0 top-[60px] z-[1] w-[42%]"
+          aria-label={`${playerName}'s current Armory appearance`}
+        >
+          <img
+            src={characterRender.status === 'trimmed' ? characterRender.src : characterRenderUrl}
+            alt={`${playerName}'s current Armory appearance`}
+            className="h-full w-full object-contain object-bottom [filter:drop-shadow(0_8px_16px_rgba(0,0,0,0.4))]"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
       <div className="relative z-10 px-9 pb-[30px] pt-[34px]">
-        {showCharacter && characterRenderUrl && (
-          <div
-            className="pointer-events-none absolute bottom-4 right-3 top-[72px] w-[28%]"
-            aria-label={`${playerName}'s current Armory appearance`}
-          >
-            <img
-              src={characterRender.status === 'trimmed' ? characterRender.src : characterRenderUrl}
-              alt={`${playerName}'s current Armory appearance`}
-              className="h-full w-full object-contain object-right [filter:drop-shadow(0_8px_16px_rgba(0,0,0,0.4))]"
-              onError={(event) => {
-                event.currentTarget.style.display = 'none';
-              }}
-            />
-          </div>
-        )}
         <div className="relative z-10">
           <h1 className="font-headline text-[34px] font-extrabold uppercase leading-none tracking-[-0.01em] text-on-surface">
             {playerName}
@@ -174,7 +175,7 @@ export default function DpsHeroCard({
       </div>
 
       {hasMetadata && (
-        <div className="relative z-10 flex flex-wrap gap-x-6 gap-y-3 border-t border-line/[0.06] bg-[color:var(--hero-meta-bg)] px-6 py-3">
+        <div className="relative z-10 flex flex-wrap gap-x-6 gap-y-3 border-t border-line/[0.06] bg-[color:var(--hero-meta-bg)] px-6 py-3 backdrop-blur-md">
           {targetError != null && targetError > 0 && (
             <HeroMetaStat
               label={t('results.error')}
