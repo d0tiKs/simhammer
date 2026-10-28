@@ -12,6 +12,7 @@ use super::mdt_handlers;
 #[cfg(feature = "desktop")]
 use super::profile_handlers;
 use super::provider_handlers;
+use super::refine_handlers;
 use super::resolve_drops;
 use super::roster_handlers;
 use super::roster_run_handlers;
@@ -24,6 +25,10 @@ use super::upgrade_compare;
 
 pub(super) fn configure(cfg: &mut web::ServiceConfig) {
     cfg.route("/api/sim", web::post().to(sim_handlers::create_sim))
+        .route(
+            "/api/sim/{id}/refine",
+            web::post().to(refine_handlers::refine),
+        )
         .route(
             "/api/sim/{id}/sim-row",
             web::post().to(sim_handlers::sim_row),

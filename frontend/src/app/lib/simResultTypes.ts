@@ -80,6 +80,7 @@ export interface QuickSimResult extends CommonResultFields {
 
 /** Top Gear / Drop Finder / Upgrade Compare / Enchant-Gem result. */
 export interface GearComparisonResult extends CommonResultFields {
+  refinement?: import('../components/gear/RefineRankings').RefinementInfo;
   result_kind: 'gear_comparison';
   /** Wire sim-type string, e.g. "top_gear". */
   type: string;

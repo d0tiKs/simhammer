@@ -16,6 +16,7 @@ mod mdt_handlers;
 #[cfg(feature = "desktop")]
 mod profile_handlers;
 mod provider_handlers;
+mod refine_handlers;
 mod resolve_drops;
 mod roster_handlers;
 mod roster_run_handlers;

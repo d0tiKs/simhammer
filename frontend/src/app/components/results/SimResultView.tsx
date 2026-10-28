@@ -71,6 +71,8 @@ export default function SimResultView({
   return isGearComparisonResult(result) ? (
     <>
       <TopGearResults
+        allowRefinement={result.type === 'top_gear'}
+        refinement={result.refinement}
         playerName={result.player_name}
         playerClass={result.player_class}
         playerRealm={result.realm}

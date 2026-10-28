@@ -237,7 +237,7 @@ pub(super) struct SimRowRequest {
 /// apply directly to the base actor instead of as a profileset comparison.
 /// Used by sim_row to re-run a single Top Gear result row as a high-precision
 /// Quick Sim.
-fn profileset_overrides_to_direct(profileset_simc: &str) -> String {
+pub(super) fn profileset_overrides_to_direct(profileset_simc: &str) -> String {
     static PROFILESET_PREFIX_RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r#"^\s*profileset\."[^"]+"\+="#).unwrap());
     profileset_simc
@@ -251,7 +251,7 @@ fn profileset_overrides_to_direct(profileset_simc: &str) -> String {
 /// input — eager jobs bake them into the input instead of combo_metadata.
 /// Matches via the runner's shared PROFILESET_NAME_RE so emitter and extractor
 /// can't drift on the line grammar.
-fn extract_profileset_lines(simc_input: &str, combo_name: &str) -> String {
+pub(super) fn extract_profileset_lines(simc_input: &str, combo_name: &str) -> String {
     simc_input
         .lines()
         .filter(|line| {

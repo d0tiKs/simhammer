@@ -32,6 +32,8 @@ import {
 } from './topGearResultsUtils';
 
 export default function TopGearResults({
+  allowRefinement,
+  refinement,
   playerName,
   playerClass,
   playerRealm,
@@ -206,6 +208,8 @@ export default function TopGearResults({
       )}
 
       <TopGearRankings
+        allowRefinement={allowRefinement}
+        refinement={refinement}
         equippedGear={equippedGear}
         results={activeResults}
         maxDps={maxDps}

@@ -6,6 +6,7 @@ import type { EnchantInfo, GemInfo, ItemInfo } from '../../lib/useItemInfo';
 import { useLanguage } from '../../lib/i18n';
 import { useWowheadTooltips } from '../../lib/useWowheadTooltips';
 import type { GroupMode, TopGearResult, ResultItem } from './topGearResultsTypes';
+import RefineRankings, { type RefinementInfo } from './RefineRankings';
 import { ResultRow } from './ResultRow';
 import CardHeader from '../ui/CardHeader';
 import ToggleButtonGroup from '../ui/ToggleButtonGroup';
@@ -17,6 +18,8 @@ import { bestDelta, bestPerItem, expectedDelta, groupResults } from './topGearRe
 const VISIBLE_STEP = 50;
 
 interface TopGearRankingsProps {
+  allowRefinement?: boolean;
+  refinement?: RefinementInfo;
   results: TopGearResult[];
   equippedGear?: Record<string, ResultItem>;
   maxDps: number;
@@ -38,7 +41,9 @@ interface TopGearRankingsProps {
 }
 
 export default function TopGearRankings({
+  allowRefinement,
   results,
+  refinement,
   equippedGear,
   maxDps,
   baseDps,
@@ -83,6 +88,15 @@ export default function TopGearRankings({
           )
         }
       />
+
+      {allowRefinement && (
+        <RefineRankings
+          sourceJobId={sourceJobId}
+          results={results}
+          targetError={targetError}
+          refinement={refinement}
+        />
+      )}
 
       {(groupMode === 'encounter' || groupMode === 'slot') && grouped ? (
         <div>

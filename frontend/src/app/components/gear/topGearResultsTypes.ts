@@ -28,6 +28,8 @@ export interface TopGearResult {
 }
 
 export interface TopGearResultsProps {
+  allowRefinement?: boolean;
+  refinement?: import('./RefineRankings').RefinementInfo;
   playerName: string;
   playerClass: string;
   playerRealm?: string;

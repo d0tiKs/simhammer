@@ -659,3 +659,17 @@ test('the drop carries only the chosen item level bonus id', () => {
   assert.deepEqual(noOption.drop_items[0].bonus_ids, []);
   assert.equal(noOption.drop_items[0].ilevel, 600);
 });
+
+const { refinementCandidates } = require('../src/app/components/gear/refinementCandidates.ts');
+test('refinement counts rough contenders and widens the cutoff without rerunning precise rows', () => {
+  const rows = [
+    { name: 'Combo 1', dps: 110, precision_pct: 1 },
+    { name: 'Combo 2', dps: 108, precision_pct: 0.1 },
+    { name: 'Combo 3', dps: 107, precision_pct: 2 },
+    { name: 'Currently Equipped', dps: 100, precision_pct: 0.1 },
+  ];
+  assert.deepEqual(refinementCandidates(rows, 0.1, 0).map(r => r.name), ['Combo 1']);
+  assert.deepEqual(refinementCandidates(rows, 0.1, 1).map(r => r.name), ['Combo 1', 'Combo 3']);
+  assert.equal(refinementCandidates(rows, undefined, 0), null);
+  assert.equal(refinementCandidates(rows.filter(r => r.precision_pct > 0.1), 0.1, 0), null);
+});
