@@ -77,7 +77,7 @@ export function AllView({
               {group.label} <span className="font-normal text-outline">({group.jobs.length})</span>
               {group.jobs[0].scenario?.simc_revision && (
                 <span className="mt-1 block break-all text-xs font-normal text-outline">
-                  SimC commit: {group.jobs[0].scenario.simc_revision}
+                  SimC branch: {String(group.jobs[0].scenario.settings.simc_branch || 'Not recorded')} · Commit: {group.jobs[0].scenario.simc_revision}
                 </span>
               )}
               {scenarioDifferences(group.jobs[0], jobs) && (
@@ -128,7 +128,9 @@ export function AllView({
                         </span>
                         <span className="text-outline">{rotationLabel(scenario?.rotation)}</span>
                         {scenario?.simc_revision && (
-                          <span className="break-all text-outline">SimC commit: {scenario.simc_revision}</span>
+                          <span className="break-all text-outline">
+                            SimC branch: {String(scenario.settings.simc_branch || 'Not recorded')} · Commit: {scenario.simc_revision}
+                          </span>
                         )}
                       </div>
                     )}

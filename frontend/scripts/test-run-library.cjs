@@ -44,6 +44,6 @@ test('revision remains available without a branch and does not consume differenc
  const a=job('a',{simc_revision:'3ca15de'});
  const b=job('b',{simc_revision:'6a4500d',settings:{simc_branch:'nightly'}});
  assert.notEqual(scenarioKey(a),scenarioKey(b));
- assert.equal(scenarioDifferences(a,[a,b]),'Simc branch: Not recorded');
+ assert.equal(scenarioDifferences(a,[a,b]),'');
 
 });
