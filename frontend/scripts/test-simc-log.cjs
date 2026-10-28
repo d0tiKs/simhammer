@@ -108,3 +108,13 @@ test('finished combos drop their chart samples; the header lines are kept', () =
   assert.equal(c3.samples.length, 1);
   assert.deepEqual(s.header, [HEADER[2], HEADER[3]]);
 });
+
+const { refinementProgress } = require('../src/app/lib/refinementProgress.ts');
+test('overall refinement counts completed runs rather than the current running run', () => {
+  assert.deepEqual(refinementProgress('Refining', '61 / 77: Combo 1086'), {current:61,total:77,completed:60,percent:77,name:'Combo 1086'});
+  assert.equal(refinementProgress('Refining', '1 / 77: Combo 1').completed, 0);
+  assert.equal(refinementProgress('Refining', '77 / 77: Combo 2').completed, 76);
+  assert.equal(refinementProgress('Queued', '61 / 77: Combo 1'), null);
+  assert.equal(refinementProgress('Refining', '0 / 0: invalid'), null);
+  assert.equal(refinementProgress('Refining', '78 / 77: invalid'), null);
+});

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { API_URL, apiUrl, fetchJsonOr, isDesktop as detectDesktop } from '../../lib/api';
 import { useLanguage } from '../../lib/i18n';
 import LiveSimView from './LiveSimView';
+import { refinementProgress } from '../../lib/refinementProgress';
 import LogConsole from './LogConsole';
 import type { LiveSim } from '../../lib/simcLog';
 import Button from '../ui/Button';
@@ -142,14 +143,47 @@ export default function SimStatus({
     </div>
   );
 
+  const batch = refinementProgress(progressStage, progressDetail);
+  const overallRefinement = batch && (
+    <section
+      aria-label="Overall refinement progress"
+      className="mb-4 rounded border border-line/10 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-on-surface">
+        <span>Overall refinement</span>
+        <span className="font-mono tabular-nums">
+          {batch.completed} / {batch.total} completed · {batch.percent}%
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Completed refinement runs"
+        aria-valuemin={0}
+        aria-valuemax={batch.total}
+        aria-valuenow={batch.completed}
+        aria-valuetext={`${batch.completed} of ${batch.total} runs completed`}
+        className="mt-2 h-2 overflow-hidden rounded-full bg-surface-container-highest"
+      >
+        <div
+          className="h-full rounded-full bg-gold-fill transition-[width] duration-300"
+          style={{ width: `${batch.percent}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-xs text-outline">
+        Running {batch.current} of {batch.total}: {batch.name}
+      </p>
+    </section>
+  );
+
   const hasCombos = !!live && Object.keys(live.combos).length > 0;
   if (live && (isRunning || isPending) && (hasCombos || liveExpected)) {
     return (
       <div className="py-6">
+        {overallRefinement}
         <LiveSimView
           jobId={jobId}
           live={live}
-          title={title}
+          title={batch ? 'Current refinement run' : title}
           cpu={cpuUsage}
           actions={actions}
           logLines={logLines ?? []}
@@ -161,6 +195,7 @@ export default function SimStatus({
 
   return (
     <div className="flex flex-col items-center justify-center space-y-6 py-16">
+      {overallRefinement}
       {isQueued && (
         <Pill variant="gold">
           <svg className="h-3.5 w-3.5 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
