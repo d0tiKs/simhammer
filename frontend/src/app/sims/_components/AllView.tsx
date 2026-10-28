@@ -208,8 +208,6 @@ function BatchGroup({
 interface Props {
   jobs: JobOverviewSummary[];
   loading: boolean;
-  isDesktop: boolean | null;
-  character: { name: string; realm: string } | null;
   busy: string | null;
   onPause: (id: string) => void;
   onResume: (id: string) => void;
@@ -217,17 +215,7 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
-export function AllView({
-  jobs,
-  loading,
-  isDesktop,
-  character,
-  busy,
-  onPause,
-  onResume,
-  onCancel,
-  onDelete,
-}: Props) {
+export function AllView({ jobs, loading, busy, onPause, onResume, onCancel, onDelete }: Props) {
   const { t } = useLanguage();
   const entries = useMemo(() => groupByBatch(jobs), [jobs]);
 
@@ -237,9 +225,6 @@ export function AllView({
         <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-surface-container-highest border-t-primary" />
       </div>
     );
-  }
-  if (isDesktop === false && !character) {
-    return <div className="card p-12 text-center text-outline">{t('sims.pasteExport')}</div>;
   }
   if (jobs.length === 0) {
     return <div className="card p-12 text-center text-outline">{t('sims.noSimsYet')}</div>;

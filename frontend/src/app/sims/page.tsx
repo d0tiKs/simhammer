@@ -12,7 +12,7 @@ import {
 } from '../lib/api';
 import { isActiveStatus, useActiveSims } from '../lib/useActiveSims';
 import { useSimContext } from '../components/sim-config/SimContext';
-import { loadLastCharacter, parseCharacterInfo } from '../lib/character';
+import { blizzardRealmSlug, parseCharacterInfo } from '../lib/character';
 import { useLanguage } from '../lib/i18n';
 import { ActiveView } from './_components/ActiveView';
 import { AllView } from './_components/AllView';
@@ -34,46 +34,43 @@ export default function SimsPage() {
   const [allJobs, setAllJobs] = useState<JobOverviewSummary[]>([]);
   const [allLoading, setAllLoading] = useState(true);
   const [allError, setAllError] = useState<string | null>(null);
-  const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
-  const [character, setCharacter] = useState<{ name: string; realm: string } | null>(null);
+  const character = useMemo(() => parseCharacterInfo(simcInput), [simcInput]);
+  const [showAllCharacters, setShowAllCharacters] = useState(false);
+  useEffect(
+    () => setShowAllCharacters(false),
+    [character?.name, character?.realm, character?.region]
+  );
+  const filterCharacter = showAllCharacters ? null : character;
   const [view, setView] = useState<ViewMode>('active');
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setIsDesktop(!!window.electronAPI);
-  }, []);
+  // Apply the same scope to history, live polling, counts and best DPS.
+  const matchesCharacter = useCallback(
+    (job: JobOverviewSummary) =>
+      !filterCharacter ||
+      (job.player_name?.toLowerCase() === filterCharacter.name.toLowerCase() &&
+        (!filterCharacter.realm ||
+          blizzardRealmSlug(job.realm ?? '') === blizzardRealmSlug(filterCharacter.realm)) &&
+        (!job.region || job.region.toLowerCase() === filterCharacter.region.toLowerCase())),
+    [filterCharacter]
+  );
 
-  // Web mode picks up the current character from simc input / localStorage
-  // so the history list scopes to that user. Desktop sees everything.
-  useEffect(() => {
-    if (isDesktop !== false) return;
-    const info = parseCharacterInfo(simcInput);
-    if (info?.name && info.realm) {
-      setCharacter({ name: info.name, realm: info.realm });
-    } else {
-      setCharacter(loadLastCharacter());
-    }
-  }, [isDesktop, simcInput]);
-
-  // Fetch full history (used by stats and the All view).
   const loadAllJobs = useCallback(() => {
-    if (isDesktop === null) return;
-    if (isDesktop === false && !character) {
-      setAllJobs([]);
-      setAllLoading(false);
-      return;
-    }
     setAllLoading(true);
     setAllError(null);
-    fetchAllJobs(isDesktop ? {} : { player: character!.name, realm: character!.realm })
+    fetchAllJobs(
+      filterCharacter
+        ? { player: filterCharacter.name, realm: filterCharacter.realm ?? undefined }
+        : {}
+    )
       .then((data) => setAllJobs(Array.isArray(data) ? data : []))
       .catch((e) => {
         setAllJobs([]);
         setAllError(e instanceof Error ? e.message : t('sims.errLoadHistory'));
       })
       .finally(() => setAllLoading(false));
-  }, [isDesktop, character, t]);
+  }, [filterCharacter, t]);
 
   useEffect(() => {
     loadAllJobs();
@@ -89,12 +86,12 @@ export default function SimsPage() {
         merged.unshift(live);
       }
     }
-    return merged;
-  }, [activeSnapshot, allJobs]);
+    return merged.filter(matchesCharacter);
+  }, [activeSnapshot, allJobs, matchesCharacter]);
 
   const activeList = useMemo(
-    () => activeSnapshot.filter((j) => isActiveStatus(j.status)),
-    [activeSnapshot]
+    () => activeSnapshot.filter((j) => isActiveStatus(j.status) && matchesCharacter(j)),
+    [activeSnapshot, matchesCharacter]
   );
 
   const refreshAll = useCallback(() => {
@@ -202,6 +199,24 @@ export default function SimsPage() {
         </div>
       )}
 
+      <label className="flex flex-wrap items-center gap-3 text-sm text-outline">
+        Character
+        <select
+          className="rounded border border-outline/30 bg-surface-container px-3 py-2 text-on-surface"
+          value={showAllCharacters || !character ? 'all' : 'selected'}
+          onChange={(event) => setShowAllCharacters(event.target.value === 'all')}
+        >
+          {character && (
+            <option value="selected">
+              {character.name}
+              {character.realm ? `-${character.realm}` : ''} (selected above)
+            </option>
+          )}
+          <option value="all">All characters</option>
+        </select>
+        <span>{mergedJobs.length} runs</span>
+      </label>
+
       <StatsOverview sims={mergedJobs} />
 
       {view === 'active' ? (
@@ -216,8 +231,6 @@ export default function SimsPage() {
         <AllView
           jobs={mergedJobs}
           loading={allLoading}
-          isDesktop={isDesktop}
-          character={character}
           busy={busy}
           onPause={handlePause}
           onResume={handleResume}
