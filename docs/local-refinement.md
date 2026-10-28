@@ -1,103 +1,65 @@
-# Local Top Gear refinement
+# Comparison refinement
 
-The rankings default to Probability selection with a 20% minimum estimated
-chance of beating the best full-precision result. The count updates before any
-simulations start. The screening score uses a normal approximation to the DPS
-difference, with standard errors derived from each reported 95% error margin
-and combined assuming independence. It is not a calibrated probability after
-selection from many combinations. Results without error data are excluded in
-this mode. The user can choose any threshold from 0 to 100%.
+Refinement reruns promising rough results from a completed Top Gear, Drop Finder,
+or Crest Upgrades report. It runs in the local queue with normal progress and
+cancellation. Closing the browser does not stop it.
 
-Auto error-range selection remains available: a rough result is included when its
-upper error bound reaches the lower error bound of the highest-DPS precise
-result. Results with unknown precision are included conservatively. This can
-select many more combinations, so the count is shown before starting.
+## Select candidates
 
-Custom selection offers a margin below the highest result whose stored error meets the
-report's target error. A margin of zero selects only rough combinations with a
-higher estimated DPS. Wider margins include additional rough contenders. The UI
-shows the candidate count before submission. Selection ignores the precision
-visibility filter and uses the complete report.
+The UI shows the candidate count before submission and uses the complete report,
+regardless of precision visibility filters.
 
-`POST /api/sim/{id}/refine` accepts
-`{"mode":"probability","min_probability_pct":20}`, `{"mode":"auto"}`, or
-`{"mode":"custom","margin_pct":0}`. Requests without `mode` retain the original
-custom-margin behavior. Copied reports record which mode was used. Completed Top Gear, Drop Finder, and Crest Upgrades jobs are supported. The operation runs through the local simulation queue, with
-progress and cancellation available through the normal job endpoints. Closing
-the browser does not stop it.
+| Mode | Selection rule |
+|------|----------------|
+| Probability, default | At least a 20% estimated chance of beating the best full-precision result; adjustable from 0 to 100%. Excludes rows without error data. |
+| Auto error range | A rough row's upper error bound reaches the best precise row's lower bound. Includes rows with unknown precision. |
+| Custom margin | Rough rows within the chosen percentage below the highest result meeting the report's target error. Zero selects only rough rows with higher estimated DPS. |
 
-The reruns inherit the normalized source options and base profile, override only
-the requested precision and iteration ceiling, and apply each combination's
-stored overrides. The ceiling is at least one million iterations; SimC normally
-stops at the target error. Actual achieved precision is saved in each row.
-The executable is copied to a temporary file for the batch, protecting it from
-replacement by the hourly engine updater. A result with a different recorded
-SimC revision is rejected. This check occurs after the first simulation, so an
-unavailable original engine can cost one simulation before failure.
+Probability uses a normal approximation, deriving standard errors from reported
+95% error margins and assuming independence. It is a screening score, not a
+calibrated probability after selection across many combinations. None of these
+modes guarantees that the best unselected combination was included.
 
-On success a new completed Top Gear job contains the source report with the
-selected rows' DPS, deltas, and precision replaced, then sorted by DPS. Other
-rows and the original baseline remain as recorded. The result records its
-source report, margin, target precision, and rerun names. The source report is
-unchanged. Reconstruction metadata is copied so future row reruns work. No old
-raw JSON, HTML, or text simulation output is attached to the combined report.
-A failed or cancelled batch does not publish a partial combined report.
+`POST /api/sim/{id}/refine` accepts one of:
 
-This narrows uncertainty around selected contenders; it does not guarantee the
-best combination outside the selected margin was included. Engine revision
-matching also cannot establish that every external data source stayed identical.
+```json
+{"mode":"probability","min_probability_pct":20}
+{"mode":"auto"}
+{"mode":"custom","margin_pct":0}
+```
 
-## Automatic refinement at launch
+Each line is a separate request body. Omitting `mode` retains custom-margin behavior.
 
-Under the simulation settings' Advanced section, comparison tools offer
-"Automatically refine promising results". It is off by default. When enabled,
-the minimum estimated improvement probability defaults to 20%, and both launch
-preferences are stored in the browser. They are independent of named sim profiles.
-Quick Sim and unrelated tools do not run automatic refinement.
+## Execution and results
 
-The normalized request records `options.auto_refine_probability`. The server
-checks completed comparison jobs independently of the browser and starts one
-local refinement pass. Each source gets a deterministic `auto-refine-<source-id>`
-child ID and a result marker linking to that child. Completed refinement reports
-never schedule further passes. Existing children and processed source markers
-prevent duplicate work across coordinator ticks and server restarts. A failed or
-cancelled child is not silently retried. No qualifying candidates produces a
-"skipped" marker; reconstruction or engine errors produce an explanatory marker.
+Reruns inherit the source's normalized options, base profile, and combination
+overrides, changing only precision and iteration ceiling. The ceiling is at
+least one million iterations; SimC normally stops at the target error.
 
-When watching a running initial sim, the browser follows its automatic child.
-Opening a finished source directly retains the original report and offers a link
-instead. This preserves access to the original results. The child uses the usual
-queue, overall progress, cancellation, and copied-report behavior.
+The engine is copied to a temporary file to protect it from updater replacement.
+A different recorded SimC revision fails the batch, checked after the first rerun.
+Revision matching cannot establish that all external data stayed identical.
 
-The coordinator uses the SQL-backed self-hosted server. It has no schema migration.
-It polls only completed comparison jobs whose normalized requests opted in and
-whose results have no refinement/automatic-processing marker.
+Success creates a new completed report of the same comparison type. Selected
+rows receive new DPS, deltas, and achieved precision; rankings are sorted again.
+Other rows, the baseline, and the source report stay unchanged. Reconstruction
+metadata supports later reruns; old raw JSON, HTML, and text outputs are not
+attached. Failed or cancelled batches do not publish partial combined reports.
 
-## Validation
+## Automatic refinement
 
-- Backend unit tests: `cd backend && cargo test -p simhammer-core refine_handlers --lib --locked`
-- Frontend checks: `cd frontend && npx tsc --noEmit && npm run test:topgear`
-- Production server and static frontend builds.
-- Automatic-launch tests used an isolated SQLite backup and separate server.
-  Three fixtures exercised starting one real SimC pass, skipping a fully precise
-  report, and recording a missing-engine failure. The success fixture used two
-  CPU threads and a loose 1% target to minimize impact on the production batch.
-  Restarting the test server preserved exactly one automatic child, with no
-  recursive or duplicate work.
-- Live test against a SQLite backup in a separate Podman container on port 18000.
-  A three-row fixture retained the top rough combination, highest precise
-  combination, and baseline from the user's report. One real rerun replaced the
-  rough number and reordered the copied report. The original fixture was
-  unchanged, cancellation persisted, and the saved result and combination
-  metadata survived restart. No production simulation was started by this test.
+Enable "Automatically refine promising results" in Advanced simulation settings.
+It is off by default, with a default probability threshold of 20%. Both launch
+preferences are saved in the browser, independently of named sim profiles.
+Quick Sim and unrelated tools do not use it.
 
-## Removing the feature
+The SQL-backed server polls completed comparisons opted in through
+`options.auto_refine_probability`. Each source gets at most one child, named
+`auto-refine-<source-id>`, with a marker linking it to the source. Markers and
+existing child IDs prevent duplicates across restarts. Refinement children do
+not trigger more passes; failed or cancelled children are not retried. No
+candidates produces a skipped marker; reconstruction or engine errors produce
+an explanatory marker. No schema migration is required.
 
-Base refinement, Auto selection, Probability selection, and launch-time
-automation have separate local commits. Revert the latest selection commit to remove only that option. To remove
-refinement entirely, revert its follow-up commits and then the base refinement
-commit. Rebuild the server and
-frontend after reverting, retaining the earlier UI customizations.
-Existing copied reports contain ordinary gear-result data and remain readable.
-The deployed local service mounts a compiled server and exported frontend; a Git
-revert alone does not replace those running artifacts.
+While watching the initial run, the browser follows its automatic child. Opening
+a finished source keeps the original report visible and offers a link to the child.

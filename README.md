@@ -32,19 +32,11 @@ SimulationCraft made simple. Run sims from your browser or download the desktop 
 
 Download the installer from [Releases](https://github.com/sortbek/simcraft/releases/latest). Available for Windows, macOS, and Linux. Runs locally using all CPU cores.
 
-### Self-Host with Docker
+### Self-host
 
-```bash
-docker run -p 8000:8000 \
-  -e SIMC_ENABLED_BRANCHES=weekly,nightly \
-  -v simhammer-data:/app/resources/data \
-  -v simhammer-data-full:/app/resources/data_full \
-  -v simhammer-simc:/app/resources/simc \
-  -v simhammer-db:/app/db \
-  ghcr.io/sortbek/simcraft:latest
-```
-
-Visit **http://localhost:8000** — single container, batteries included.
+See [Self-hosting](docs/self-hosting.md) for Docker, Podman, and source builds.
+The demo and desktop downloads above are upstream releases. Build from this
+checkout to run this fork's changes.
 
 ## Documentation
 
@@ -53,6 +45,8 @@ Visit **http://localhost:8000** — single container, batteries included.
 | **[Architecture](docs/architecture.md)** | System design, storage, deployment modes |
 | **[Development](docs/development.md)** | Local setup, web + desktop dev, building |
 | **[Self-Hosting](docs/self-hosting.md)** | Docker, PostgreSQL, VPS deploy, environment variables |
+| **[Local refinement](docs/local-refinement.md)** | Refine comparison results and configure automatic refinement |
+| **[Calibration](backend/calibration/README.md)** | Capture Top Gear requests and run the supported triage grid |
 | **[Contributing](CONTRIBUTING.md)** | Code style, PRs, CI pipeline |
 
 ## License

@@ -1,5 +1,10 @@
 # Top Gear — "Add Item" from the loot catalog
 
+> Historical specification, retained for design context. Add Item shipped upstream
+> in commit `131e7cf` and changed further in `6dd7221`. The current UI uses the
+> class-filtered search panel in [AddItemSearch.tsx](../../frontend/src/app/components/gear/AddItemSearch.tsx).
+> The proposed modal and task checklist below do not describe the current implementation.
+
 **Date:** 2026-06-18
 **Status:** Design (approved decisions, pending spec review)
 

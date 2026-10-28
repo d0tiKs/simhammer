@@ -1,26 +1,14 @@
 # Architecture
 
-## Overview
+## Deployment modes
 
-SimHammer is a monorepo with three deployment modes sharing one codebase:
+The shared Next.js frontend talks to one Rust/Actix API. Standalone serves both
+on port 8000; separate web services use frontend port 3000 and API port 8000;
+Electron runs a local backend on 17384. SQLite is available in every build.
+PostgreSQL requires the `postgres` build feature.
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    Next.js Frontend                  │
-│              (shared by all three modes)             │
-└──────────────────────┬──────────────────────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-   Standalone        Web          Desktop
-   (port 8000)    (port 8000)   (port 17384)
-        │              │              │
-   Rust/Actix     Rust/Actix     Rust/Actix
-        │              │              │
-     SQLite      SQLite/Postgres   SQLite
-        │              │              │
-       simc           simc          simc
-```
+See [Self-hosting](self-hosting.md) for deployment and [Development](development.md)
+for local setup.
 
 ## Project Structure
 
@@ -46,7 +34,7 @@ The core library (`simhammer-core`) provides:
 - **Result parser** — extracts DPS, abilities, stat weights from SimC JSON output
 - **SimC runner** — spawns simc as a subprocess with staged execution
 - **Game data** — loads Raidbots JSON files (items, enchants, bonuses, instances, upgrade tracks)
-- **Storage** — Repository pattern with sqlx: `JobRepo`, `CharacterRepo`, `RouteRepo`, `SettingsRepo`. Supports both SQLite and PostgreSQL (detected from `DATABASE_URL` scheme, or set explicitly via `DB_BACKEND`)
+- **Storage** — Repository pattern with sqlx: `JobRepo`, `CharacterRepo`, `RouteRepo`, `SettingsRepo`. Supports SQLite and, when compiled with the `postgres` feature, PostgreSQL. The backend is detected from the `DATABASE_URL` scheme or set explicitly via `DB_BACKEND`.
 
 ### Key Patterns
 
@@ -55,13 +43,14 @@ The core library (`simhammer-core`) provides:
 - All item/enchant/gem/bonus data from local JSON files, no external API calls at runtime
 - Wowhead tooltips loaded client-side (hover popups only)
 - Single Rust backend serves identical API shape for both web and desktop
-- Build-time asset caching: instance images and faction crests downloaded during compaction
+- Asset caching: instance images and faction crests downloaded during compaction, at image build time or standalone container startup
 
 ### Job Retention
 
-Jobs are automatically garbage collected on insert:
-- **Desktop**: last 50 sims
-- **Web**: last 200 sims
+Jobs are automatically garbage collected on insert. Default retention limits
+are 50 terminal jobs for builds with the `desktop` feature and 200 for web builds.
+Set `MAX_JOBS` to override the limit. Pending, running, and paused jobs are
+excluded from the cap.
 
 ## Blizzard API Integration
 
@@ -74,10 +63,13 @@ SimHammer uses `simhammer.com` as a caching proxy for Blizzard API data:
 | `/api/blizzard/character/{region}/{realm}/{name}/media/{type}` | Character render/avatar/inset (302 redirect) | 1 hour |
 | `/api/blizzard/character/{region}/{realm}/{name}/profile` | Character summary with faction | 15 min |
 
-Instance images and faction assets are fetched at **build time** and served locally — no runtime CDN dependency.
+Instance images and faction assets are fetched during data compaction and served
+locally. The standalone container fetches data and compacts it at startup; the
+separate backend image compacts data during its build. Character renders and
+Wowhead tooltips still use external services at runtime.
 
 ## CI/CD
 
 - **Lint** — Prettier, ESLint, cargo fmt, Clippy on every PR
 - **Desktop** — GitHub Actions builds Windows, macOS (code signing + notarization), Linux installers on tagged releases
-- **Docker** — Published to `ghcr.io/sortbek/simcraft` on push to master (amd64)
+- **Docker** — Published to `ghcr.io/sortbek/simcraft` on `v*` tags or manual workflow dispatch (linux/amd64 and linux/arm64)

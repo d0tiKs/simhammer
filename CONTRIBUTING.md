@@ -1,59 +1,49 @@
-# Contributing to SimHammer
+# Contributing
 
-## Pull Request Guidelines
+Keep each PR focused on one concern. Separate formatting-only changes from
+functional changes, and work on a branch rather than committing to `master`.
 
-- **One concern per PR.** Don't mix features, bug fixes, and refactors in a single PR.
-- **No formatting-only changes in functional PRs.** If code needs reformatting, do it in a separate commit or PR. This keeps diffs reviewable.
-- **Keep PRs small.** Smaller PRs get reviewed faster and are less likely to introduce bugs.
+For setup, see [Development](docs/development.md).
 
-## Code Style
+## Checks
 
-### Frontend (TypeScript / React)
-
-Formatting is enforced by [Prettier](https://prettier.io/) with the config in `.prettierrc`.
+Run from the repository root before pushing:
 
 ```bash
-cd frontend
-
-# Check formatting
-npx prettier --check "src/**/*.{ts,tsx,css}"
-
-# Auto-fix formatting
-npx prettier --write "src/**/*.{ts,tsx,css}"
+bash scripts/verify.sh
 ```
 
-### Backend (Rust)
+The gate checks Rust formatting, Clippy, backend tests, frontend formatting,
+ESLint, TypeScript, translations, and frontend/desktop unit tests. Missing tools
+or game data are reported as skipped, not passed. Backend tests need compacted
+game data; frontend talent tests need `backend/resources/data/talents.json`.
 
-Formatting is enforced by `rustfmt`. Linting is done with `clippy`.
+Useful subsets:
 
 ```bash
-cd backend
-
-# Check formatting
-cargo fmt --all -- --check
-
-# Auto-fix formatting
-cargo fmt --all
-
-# Lint
-cargo clippy --all-targets --all-features -- -D warnings
+bash scripts/verify.sh --fast       # formatting and unit tests
+bash scripts/verify.sh --frontend   # also accepts --rust and --desktop
 ```
 
-## CI Checks
+Enable the fast gate before each commit:
 
-All PRs to `master` and `dev` run automated checks:
+```bash
+git config core.hooksPath hooks
+```
 
-- **Prettier** — Frontend formatting must pass
-- **ESLint** — Frontend linting via `next lint`
-- **rustfmt** — Backend formatting must pass
-- **Clippy** — Backend linting must pass
-- **cargo test** — Backend test suite
-- **tsc** — Frontend typecheck
-- **node:test** — Frontend and desktop unit suites
+CI runs on PRs to `master` and `dev`. [lint.yml](.github/workflows/lint.yml)
+covers formatting, linting, and Rust tests; [test.yml](.github/workflows/test.yml)
+covers TypeScript, translations, and frontend/desktop tests.
 
-Run them all locally with `bash scripts/verify.sh` before pushing, or activate
-the pre-commit gate once with `git config core.hooksPath hooks`.
+## Formatting
 
-## Development Setup
+```bash
+cd frontend && npm run format
+```
 
-See the [README](README.md) for full setup instructions.
+```bash
+cd backend && cargo fmt --all
+```
+
+Use `npm run lint` in `frontend/` for ESLint. Use
+`cargo clippy --all-targets --all-features -- -D warnings` in `backend/` for Rust linting.

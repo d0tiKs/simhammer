@@ -1,112 +1,74 @@
 # Development
 
-## Prerequisites
+## Requirements
 
-- **Rust** toolchain (stable)
-- **Node.js** 20+
-- **Docker** (optional, for game data fetching)
+- Rust via rustup. `backend/rust-toolchain.toml` pins the compiler, rustfmt, and Clippy.
+- Node.js 20+ and npm.
+- Docker Compose for the container setup.
 
-## Web Development
+## Web with Docker
 
-### Without Docker
-
-```bash
-# Terminal 1 — Backend
-cd backend && cargo run -p simhammer-server
-
-# Terminal 2 — Frontend
-cd frontend && npm install && npm run dev
-```
-
-Create `frontend/.env.local`:
-```
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-- Frontend: http://localhost:3000
-- API: http://localhost:8000
-
-Game data and SimC binary must be in `backend/resources/`. See [Self-Hosting](self-hosting.md) for how the data is fetched.
-
-### With Docker
+From the repository root:
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-Handles everything — compiles Rust, downloads SimC, fetches game data, starts frontend.
+This builds the frontend and backend, starts PostgreSQL, and fetches game data
+and SimC. Open http://localhost:3000; the API listens on port 8000.
 
-## Desktop Development
+## Web without Docker
 
-### 1. Install dependencies
+Fetch game data from the repository root:
 
 ```bash
-cd frontend && npm install && cd ..
-cd desktop && npm install && cd ..
+bash backend/resources/data/fetch-data.sh backend/resources/data
 ```
 
-### 2. Run
+Install a compatible binary from [SimC builds](https://github.com/sortbek/simc-builds/releases)
+or build [SimulationCraft](https://github.com/simulationcraft/simc).
+
+Create `frontend/.env.local` before starting the frontend:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Run these in separate terminals, starting each from the repository root:
 
 ```bash
+cd backend
+SIMC_PATH=/absolute/path/to/simc cargo run -p simhammer-server
+```
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open http://localhost:3000. Replace the example SimC path with your installed
+binary. For a multi-version installation, use `SIMC_DIR` instead. Without either
+variable, the server looks for `/usr/local/bin/simc`.
+
+## Desktop
+
+From the repository root:
+
+```bash
+npm ci --prefix frontend
+npm ci --prefix desktop
 npm run desktop:dev
 ```
 
-On first run, this fetches game data from Raidbots and downloads a pre-built SimC binary from GitHub (stored in `backend/resources/`). Subsequent runs skip this step.
+The launcher fetches missing game data and a prebuilt SimC binary under
+`backend/resources/`, then starts the backend on 17384, Next.js on 3000, and
+Electron. To refresh data after a patch, delete `backend/resources/data/` and/or
+`backend/resources/simc/` before relaunching.
 
-This starts:
-1. Rust backend (debug mode, port 17384)
-2. Next.js dev server (port 3000)
-3. Electron app
+Build an installer with `npm run desktop:build`. Output is in `desktop/dist/`.
 
-To re-fetch after a game patch, delete `backend/resources/data/` and/or `backend/resources/simc/`.
+## Checks
 
-### Build Installer
-
-```bash
-npm run desktop:build
-```
-
-Output goes to `desktop/dist/`.
-
-## Code Quality
-
-All checks run in CI on every PR:
-
-| Tool | Scope | Command |
-|------|-------|---------|
-| Prettier | Frontend formatting | `cd frontend && npx prettier --check "src/**/*.{ts,tsx,css}"` |
-| ESLint | Frontend linting | `cd frontend && npm run lint` |
-| cargo fmt | Backend formatting | `cd backend && cargo fmt --all -- --check` |
-| Clippy | Backend linting | `cd backend && cargo clippy --all-targets --all-features -- -D warnings` |
-
-Plus the unit-test suites, in `.github/workflows/test.yml`:
-
-| Tool | Scope | Command |
-|------|-------|---------|
-| tsc | Frontend typecheck | `cd frontend && npx tsc --noEmit` |
-| node:test | Frontend logic (178 tests) | `cd frontend && node --test scripts/test-*.cjs` |
-| node:test | Desktop main process | `cd desktop && npm test` |
-| cargo test | Backend | `cd backend && cargo test --all-features` |
-
-Run everything locally with one command instead of remembering the list:
-
-```bash
-bash scripts/verify.sh            # every gate this machine can run
-bash scripts/verify.sh --fast     # formatting + unit tests, no full builds
-bash scripts/verify.sh --frontend # one area at a time
-```
-
-A gate whose toolchain is absent (no local Rust, no `node_modules`, no game
-data) is reported as SKIPPED rather than quietly passing, so you always know
-what CI still has to prove. Auto-fix formatting with
-`cd frontend && npm run format` and `cd backend && cargo fmt --all`.
-
-### Local pre-commit gate
-
-`hooks/pre-commit` runs `scripts/verify.sh --fast`. Activate it once per clone:
-
-```bash
-git config core.hooksPath hooks
-```
-
-Bypass in an emergency with `git commit --no-verify`.
+See [Contributing](../CONTRIBUTING.md#checks) for the verification gate and CI checks.
+For deployment and server settings, see [Self-hosting](self-hosting.md).

@@ -1,5 +1,10 @@
 # Top Gear "Add Item" Implementation Plan
 
+> Historical specification, retained for design context. Add Item shipped upstream
+> in commit `131e7cf` and changed further in `6dd7221`. The current UI uses the
+> class-filtered search panel in [AddItemSearch.tsx](../../frontend/src/app/components/gear/AddItemSearch.tsx).
+> The proposed modal and task checklist below do not describe the current implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add an "Add item" button to Top Gear that opens a modal with the full DropFinder catalog, lets the user pick any item at a chosen item level, and inserts it as an auto-selected alternative in its slot group.
