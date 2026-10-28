@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Link from 'next/link';
 import type { JobOverviewSummary } from '../../lib/api';
 import { isActiveStatus } from '../../lib/useActiveSims';
@@ -50,6 +51,14 @@ export function AllView({
   onDelete,
 }: Props) {
   const { t } = useLanguage();
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleSettings = (id: string) =>
+    setExpanded((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   if (loading) return <div className="py-8 text-center text-outline">Loading runs…</div>;
   if (!jobs.length)
     return <div className="card p-8 text-center text-outline">No runs match these filters.</div>;
@@ -136,7 +145,9 @@ export function AllView({
                       {job.precise_dps == null
                         ? job.dps == null
                           ? job.status
-                          : 'Estimate'
+                          : scenario?.achieved_error_pct != null
+                            ? `±${scenario.achieved_error_pct}% · ${scenario.target_error === 0 ? 'Fixed iterations' : 'Above target'}`
+                            : 'Estimate'
                         : `±${job.precise_error_pct}% error`}
                     </p>
                     <p className="mt-1 text-xs text-outline md:mt-0">
@@ -144,50 +155,19 @@ export function AllView({
                     </p>
                   </div>
                 </div>
-                <div className="col-span-full flex flex-wrap items-start justify-between gap-3 md:col-span-1 md:items-center md:[&:has(details[open])]:col-span-full">
-                  <details className="min-w-0 flex-1 text-xs text-outline">
-                    <summary className="w-fit cursor-pointer py-1">Settings</summary>
-                    <dl className="mt-2 space-y-1 break-words rounded bg-surface-container-high/50 p-3">
-                      <div>
-                        <dt className="inline text-on-surface">Character: </dt>
-                        <dd className="inline">
-                          {job.player_name}
-                          {job.realm ? `-${job.realm}` : ''} · {job.player_class ?? 'Spec unknown'}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="inline text-on-surface">Duration variation: </dt>
-                        <dd className="inline">
-                          {scenario?.variation == null
-                            ? 'Not recorded'
-                            : `±${Math.round(scenario.variation * 100)}%`}
-                        </dd>
-                      </div>
-                      {Object.entries(scenario?.settings ?? {}).map(([key, value]) => (
-                        <div key={key}>
-                          <dt className="inline text-on-surface">{key.replaceAll('_', ' ')}: </dt>
-                          <dd className="inline">{settingValue(value)}</dd>
-                        </div>
-                      ))}
-                      <div>
-                        <dt className="inline text-on-surface">SimC revision: </dt>
-                        <dd className="inline">{scenario?.simc_revision ?? 'Not recorded'}</dd>
-                      </div>
-                      <div>
-                        <dt className="inline text-on-surface">Iterations: </dt>
-                        <dd className="inline">
-                          {scenario?.actual_iterations != null
-                            ? `${scenario.actual_iterations.toLocaleString()} completed`
-                            : `${job.iterations.toLocaleString()} requested`}
-                        </dd>
-                      </div>
-                      <div>
-                        <Link href={`/sim/${job.id}`} className="text-gold hover:underline">
-                          Open full report →
-                        </Link>
-                      </div>
-                    </dl>
-                  </details>
+                <div className="col-span-full flex flex-wrap items-start justify-between gap-3 md:col-span-1 md:items-center">
+                  <button
+                    type="button"
+                    aria-expanded={expanded.has(job.id)}
+                    aria-controls={`settings-${job.id}`}
+                    onClick={() => toggleSettings(job.id)}
+                    className="inline-flex items-center gap-1 py-1 text-xs text-outline hover:text-on-surface"
+                  >
+                    <span aria-hidden="true" className="inline-block w-3">
+                      {expanded.has(job.id) ? '▾' : '▸'}
+                    </span>
+                    Settings
+                  </button>
                   {isActiveStatus(job.status) ? (
                     <JobActionButtons
                       job={job}
@@ -210,6 +190,51 @@ export function AllView({
                     </Button>
                   )}
                 </div>
+                {expanded.has(job.id) && (
+                  <dl
+                    id={`settings-${job.id}`}
+                    className="col-span-full mt-2 min-w-0 space-y-1 break-words rounded bg-surface-container-high/50 p-3 text-xs text-outline"
+                  >
+                    <div>
+                      <dt className="inline text-on-surface">Character: </dt>
+                      <dd className="inline">
+                        {job.player_name}
+                        {job.realm ? `-${job.realm}` : ''} · {job.player_class ?? 'Spec unknown'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="inline text-on-surface">Duration variation: </dt>
+                      <dd className="inline">
+                        {scenario?.variation == null
+                          ? 'Not recorded'
+                          : `±${Math.round(scenario.variation * 100)}%`}
+                      </dd>
+                    </div>
+                    {Object.entries(scenario?.settings ?? {}).map(([key, value]) => (
+                      <div key={key}>
+                        <dt className="inline text-on-surface">{key.replaceAll('_', ' ')}: </dt>
+                        <dd className="inline">{settingValue(value)}</dd>
+                      </div>
+                    ))}
+                    <div>
+                      <dt className="inline text-on-surface">SimC revision: </dt>
+                      <dd className="inline">{scenario?.simc_revision ?? 'Not recorded'}</dd>
+                    </div>
+                    <div>
+                      <dt className="inline text-on-surface">Iterations: </dt>
+                      <dd className="inline">
+                        {scenario?.actual_iterations != null
+                          ? `${scenario.actual_iterations.toLocaleString()} completed`
+                          : `${job.iterations.toLocaleString()} requested`}
+                      </dd>
+                    </div>
+                    <div>
+                      <Link href={`/sim/${job.id}`} className="text-gold hover:underline">
+                        Open full report →
+                      </Link>
+                    </div>
+                  </dl>
+                )}
               </article>
             );
           })}
