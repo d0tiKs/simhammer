@@ -409,6 +409,15 @@ pub fn get_instance_drops(
                             .and_then(|v| v.as_object())
                         {
                             for (diff_key, entry) in ddt {
+                                // A vendor tier (Soul Fragments) sells only some
+                                // slots; the missing key is what hides the rest.
+                                if let Some(allowed) =
+                                    entry.get("inventoryTypes").and_then(|v| v.as_array())
+                                {
+                                    if !allowed.iter().any(|t| t.as_u64() == Some(inv_type)) {
+                                        continue;
+                                    }
+                                }
                                 let track =
                                     entry.get("track").and_then(|v| v.as_str()).unwrap_or("");
                                 let level =
