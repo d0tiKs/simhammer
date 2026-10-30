@@ -6,8 +6,8 @@ interface HeroMetaStatProps {
 
 export default function HeroMetaStat({ label, value, note }: HeroMetaStatProps) {
   return (
-    <div className="min-w-[90px] flex-1">
-      <span className="lbl text-[10px]">{label}</span>
+    <div className="min-w-0">
+      <span className="lbl block text-[10px]">{label}</span>
       <span className="mt-1 block font-headline text-sm font-extrabold text-on-surface">
         {value}
         {note && (

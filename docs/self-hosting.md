@@ -48,6 +48,62 @@ This image serves the API only; deploy the frontend separately. The server
 auto-detects the database type from the URL prefix, but its build must include
 the corresponding feature.
 
+## Podman with Quadlet
+
+Run as the rootless container owner from the repository root. Requires Linux,
+systemd, and Podman with Quadlet.
+
+```bash
+install -d -m 700 "$HOME/.config/simhammer"
+install -Dm600 deploy/podman/simhammer.env.example "$HOME/.config/simhammer/simhammer.env"
+install -Dm644 deploy/podman/simhammer.container "$HOME/.config/containers/systemd/simhammer.container"
+```
+
+Edit `~/.config/simhammer/simhammer.env` to choose SimC branches and optionally
+set `ADMIN_PASSWORD`. The [template](../deploy/podman/simhammer.container) uses the
+upstream image, binds to `127.0.0.1:8000`, and reuses the four `simhammer-*` volumes
+shown above. Stop any existing container named `simhammer` or service on that port.
+
+To run this checkout, build an image and set
+`Image=localhost/simhammer:latest` in the installed `.container` file:
+
+```bash
+podman build -f Dockerfile.standalone -t localhost/simhammer:latest .
+```
+
+Start and inspect the service:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user start simhammer.service
+journalctl --user -u simhammer.service -f
+```
+
+Wait for `HTTP server started`, then check http://localhost:8000 or `/health`.
+Quadlet's `[Install]` section handles startup; do not run `systemctl enable`.
+To start at boot without an active login, run `loginctl enable-linger "$USER"`.
+
+For [direct Blizzard imports](#exact-armory-equipment-stats), set the client ID
+and secret-file path in the private environment file and uncomment the matching
+read-only `Volume=` line. Create the host secret file with mode 600. The mount's
+`Z` option applies a private SELinux label.
+
+After editing the Quadlet file, run `systemctl --user daemon-reload`. Restart
+with `systemctl --user restart simhammer.service` after any configuration change.
+For image updates, rebuild the local image or pull
+`ghcr.io/sortbek/simcraft:latest`, then restart.
+
+To remove the service while retaining configuration and volumes:
+
+```bash
+systemctl --user stop simhammer.service
+rm "$HOME/.config/containers/systemd/simhammer.container"
+systemctl --user daemon-reload
+```
+
+See [Podman's Quadlet reference](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html)
+for service lifecycle details.
+
 ## Exact Armory equipment stats
 
 Midnight catalyst gear can retain its source item's secondary stats, which item

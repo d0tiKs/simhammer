@@ -70,6 +70,7 @@ fn candidates(
     margin: f64,
     mode: SelectionMode,
     min_probability: f64,
+    use_equipped_baseline: bool,
 ) -> Result<Vec<String>, String> {
     if !margin.is_finite() || !(0.0..=10.0).contains(&margin) {
         return Err("Margin must be between 0 and 10 percent".into());
@@ -90,17 +91,29 @@ fn candidates(
             .as_f64()
             .is_some_and(|p| p <= target + 0.005)
     };
-    let best = rows
-        .iter()
-        .filter(|r| precise(r))
-        .filter_map(|r| r["dps"].as_f64())
-        .reduce(f64::max)
-        .ok_or("No full-precision result is available")?;
-    let reference_error = rows
-        .iter()
-        .find(|r| precise(r) && r["dps"].as_f64() == Some(best))
-        .and_then(|r| r["precision_pct"].as_f64())
-        .unwrap_or(0.0);
+    let reference = if use_equipped_baseline {
+        rows.iter()
+            .find(|r| {
+                r["name"]
+                    .as_str()
+                    .is_some_and(|n| n.starts_with("Currently Equipped"))
+                    && precise(r)
+            })
+            .ok_or("The equipped baseline has no full-precision result")?
+    } else {
+        rows.iter()
+            .filter(|r| precise(r))
+            .filter(|r| r["dps"].as_f64().is_some())
+            .max_by(|a, b| {
+                a["dps"]
+                    .as_f64()
+                    .unwrap()
+                    .total_cmp(&b["dps"].as_f64().unwrap())
+            })
+            .ok_or("No full-precision result is available")?
+    };
+    let best = reference["dps"].as_f64().ok_or("Missing baseline DPS")?;
+    let reference_error = reference["precision_pct"].as_f64().unwrap_or(0.0);
     let reference_lower = best * (1.0 - reference_error / 100.0);
     let cutoff = best * (1.0 - margin / 100.0);
     Ok(rows
@@ -236,7 +249,13 @@ pub(super) async fn refine(
         Some(v) => v,
         None => return fail("Source result is missing".into()),
     };
-    let names = match candidates(&original, req.margin_pct, req.mode, req.min_probability_pct) {
+    let names = match candidates(
+        &original,
+        req.margin_pct,
+        req.mode,
+        req.min_probability_pct,
+        source.sim_type == "droptimizer",
+    ) {
         Ok(n) if !n.is_empty() => n,
         Ok(_) => return fail("No combinations match this margin".into()),
         Err(e) => return fail(e),
@@ -506,6 +525,24 @@ mod tests {
         json!({"base_dps":100.0,"target_error":0.1,"simc_git_revision":"abc","results":[{"name":"Combo 1","dps":110.0,"precision_pct":1.0,"items":[1]},{"name":"Combo 2","dps":108.0,"precision_pct":0.1},{"name":"Combo 3","dps":107.0,"precision_pct":2.0}]})
     }
     #[test]
+    fn drop_finder_refines_against_equipped_not_best_item() {
+        let mut result = source();
+        result["results"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"name":"Currently Equipped","dps":100.0,"precision_pct":0.1}));
+        assert_eq!(
+            candidates(&result, 0.0, SelectionMode::Custom, 20.0, true).unwrap(),
+            vec!["Combo 1", "Combo 3"]
+        );
+        assert_eq!(
+            candidates(&result, 0.0, SelectionMode::Custom, 20.0, false).unwrap(),
+            vec!["Combo 1"]
+        );
+        result["results"].as_array_mut().unwrap().pop();
+        assert!(candidates(&result, 0.0, SelectionMode::Custom, 20.0, true).is_err());
+    }
+    #[test]
     fn refinement_inherits_fight_consumables_buffs_and_custom_options() {
         let source = json!({"fight_style":"DungeonRoute","desired_targets":5,"max_time":180,"food":"feast","override.bloodlust":false,"custom_apl":"raid_events+=/pull,pull=1","simc_branch":"nightly","threads":8,"target_error":2,"iterations":100});
         let options = refinement_options(&source, 0.1, 100, true).unwrap();
@@ -528,14 +565,14 @@ mod tests {
     #[test]
     fn margin_selects_only_rough_contenders() {
         assert_eq!(
-            candidates(&source(), 0.0, SelectionMode::Custom, 20.0).unwrap(),
+            candidates(&source(), 0.0, SelectionMode::Custom, 20.0, false).unwrap(),
             vec!["Combo 1"]
         );
         assert_eq!(
-            candidates(&source(), 1.0, SelectionMode::Custom, 20.0).unwrap(),
+            candidates(&source(), 1.0, SelectionMode::Custom, 20.0, false).unwrap(),
             vec!["Combo 1", "Combo 3"]
         );
-        assert!(candidates(&source(), -1.0, SelectionMode::Custom, 20.0).is_err());
+        assert!(candidates(&source(), -1.0, SelectionMode::Custom, 20.0, false).is_err());
     }
     #[test]
     fn copy_replaces_numbers_and_keeps_source_and_gear() {
@@ -575,10 +612,10 @@ mod tests {
             json!({"name":"Combo 6","dps":90.0}),
         ]);
         assert_eq!(
-            candidates(&s, 0.0, SelectionMode::Auto, 20.0).unwrap(),
+            candidates(&s, 0.0, SelectionMode::Auto, 20.0, false).unwrap(),
             vec!["Combo 1", "Combo 3", "Combo 5", "Combo 6"]
         );
-        assert!(candidates(&s, 0.0, SelectionMode::Auto, 20.0)
+        assert!(candidates(&s, 0.0, SelectionMode::Auto, 20.0, false)
             .unwrap()
             .iter()
             .all(|n| n != "Combo 2"));
@@ -594,14 +631,14 @@ mod tests {
             json!({"name":"Combo 5","dps":90.0}),
         ]);
         assert_eq!(
-            candidates(&s, 0.0, SelectionMode::Probability, 20.0).unwrap(),
+            candidates(&s, 0.0, SelectionMode::Probability, 20.0, false).unwrap(),
             vec!["Combo 1", "Combo 3"]
         );
         assert_eq!(
-            candidates(&s, 0.0, SelectionMode::Probability, 50.0).unwrap(),
+            candidates(&s, 0.0, SelectionMode::Probability, 50.0, false).unwrap(),
             vec!["Combo 1"]
         );
-        assert!(candidates(&s, 0.0, SelectionMode::Probability, 101.0).is_err());
+        assert!(candidates(&s, 0.0, SelectionMode::Probability, 101.0, false).is_err());
         assert_eq!(improvement_probability(100.0, 0.0, 100.0, 0.0), 0.5);
     }
     #[test]

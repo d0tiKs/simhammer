@@ -33,6 +33,7 @@ import {
 
 export default function TopGearResults({
   allowRefinement,
+  useEquippedBaseline,
   refinement,
   playerName,
   playerClass,
@@ -136,6 +137,7 @@ export default function TopGearResults({
         playerRealm={playerRealm}
         playerRegion={playerRegion}
         dps={heroResult ? heroResult.dps : baseDps}
+        fightStyle={setup?.fight_style}
         fightLength={fightLength}
         desiredTargets={desiredTargets}
         iterations={iterations}
@@ -209,6 +211,7 @@ export default function TopGearResults({
 
       <TopGearRankings
         allowRefinement={allowRefinement}
+        useEquippedBaseline={useEquippedBaseline}
         refinement={refinement}
         equippedGear={equippedGear}
         results={activeResults}

@@ -18,11 +18,13 @@ export interface RefinementInfo {
 
 export default function RefineRankings({
   sourceJobId,
+  useEquippedBaseline,
   results,
   targetError,
   refinement,
 }: {
   sourceJobId?: string;
+  useEquippedBaseline?: boolean;
   results: TopGearResult[];
   targetError?: number;
   refinement?: RefinementInfo;
@@ -50,9 +52,21 @@ export default function RefineRankings({
     targetError,
     mode === 'auto' ? 0 : valid ? value : 0,
     mode,
-    probabilityValid ? probabilityValue : 20
+    probabilityValid ? probabilityValue : 20,
+    useEquippedBaseline
   );
   if (!sourceJobId) return null;
+  if (
+    useEquippedBaseline &&
+    !refinement &&
+    targetError &&
+    !results.some(
+      (row) =>
+        /^Combo \d+$/.test(row.name) &&
+        (row.precision_pct == null || row.precision_pct > targetError + 0.005)
+    )
+  )
+    return null;
   return (
     <div className="border-t border-line/10 px-3 py-3 text-sm sm:px-4">
       {refinement && (
@@ -105,7 +119,7 @@ export default function RefineRankings({
           <label className="flex flex-wrap items-center gap-2 text-xs text-on-surface">
             Include rough results within
             <input
-              aria-label="Margin below the best full-precision result"
+              aria-label="Margin below the reference result"
               type="number"
               min="0"
               max="10"
@@ -115,7 +129,8 @@ export default function RefineRankings({
               onChange={(event) => setMargin(event.target.value)}
               className="w-16 rounded border border-line/20 bg-surface px-2 py-1"
             />
-            % below the best full-precision result
+            % below{' '}
+            {useEquippedBaseline ? 'currently equipped gear' : 'the best full-precision result'}
           </label>
         )}
         <Button
@@ -159,14 +174,16 @@ export default function RefineRankings({
         {mode === 'probability'
           ? 'Estimated using a normal approximation and both results’ uncertainty. This is a screening score, not a calibrated probability. Results without error data are excluded.'
           : mode === 'auto'
-            ? 'Auto selects rough results whose error ranges overlap or exceed the best full-precision result. Results with unknown error are included.'
+            ? `Auto selects rough results whose error ranges overlap or exceed ${useEquippedBaseline ? 'currently equipped gear' : 'the best full-precision result'}. Results with unknown error are included.`
             : 'Wider margins include more results.'}{' '}
         Check the count before starting; more combinations take longer. Creates a new report at ±
         {targetError}% using the source settings and the same SimC revision.
       </p>
       {candidates === null && (
         <p className="mt-1 text-xs text-outline">
-          No full-precision result is available as a reference.
+          {useEquippedBaseline
+            ? 'The equipped baseline has no full-precision result.'
+            : 'No full-precision result is available as a reference.'}
         </p>
       )}
       {!valid && (

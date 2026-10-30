@@ -1,0 +1,23 @@
+# Rootless Quadlet. See docs/self-hosting.md for installation and credentials.
+[Unit]
+Description=SimHammer self-hosted web application
+
+[Container]
+Image=ghcr.io/sortbek/simcraft:latest
+ContainerName=simhammer
+PublishPort=127.0.0.1:8000:8000
+EnvironmentFile=%h/.config/simhammer/simhammer.env
+Volume=simhammer-data:/app/resources/data
+Volume=simhammer-data-full:/app/resources/data_full
+Volume=simhammer-simc:/app/resources/simc
+Volume=simhammer-db:/app/db
+
+# Optional: uncomment when using direct Blizzard equipment imports.
+# Volume=%h/.config/simhammer/blizzard-client-secret:/run/secrets/blizzard-client-secret:ro,Z
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

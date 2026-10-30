@@ -725,3 +725,15 @@ test('probability threshold defaults to 20 percent and updates candidate counts'
   assert.ok(Math.abs(improvementProbability(100, 1, 100, 1) - 0.5) < 1e-7);
   assert.equal(improvementProbability(100, 0, 100, 0), 0.5);
 });
+
+test('Drop Finder refinement compares rough upgrades with equipped gear', () => {
+  const rows = [
+    { name: 'Currently Equipped', dps: 100, precision_pct: 0.1 },
+    { name: 'Combo 1', dps: 110, precision_pct: 1 },
+    { name: 'Combo 2', dps: 108, precision_pct: 0.1 },
+    { name: 'Combo 3', dps: 107, precision_pct: 2 },
+  ];
+  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'custom', 20, true).map(r => r.name), ['Combo 1', 'Combo 3']);
+  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'custom').map(r => r.name), ['Combo 1']);
+  assert.equal(refinementCandidates(rows.slice(1), 0.1, 0, 'custom', 20, true), null);
+});

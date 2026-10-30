@@ -58,6 +58,8 @@ jobs:
         with:
           context: .
           file: Dockerfile.standalone
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=build-${{ env.PLATFORM_PAIR }}

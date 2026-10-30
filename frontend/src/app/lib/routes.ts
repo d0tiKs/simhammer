@@ -13,6 +13,7 @@ export const ROUTES = {
   advanced: '/advanced',
   sims: '/sims',
   settings: '/settings',
+  changelog: '/changelog',
   /** Legacy alias; redirects to `sims`. */
   history: '/history',
 } as const;

@@ -37,6 +37,11 @@ const PATHS = {
       <path d="M6 8h8M6 11h5" />
     </>
   ),
+  changelog: (
+    <>
+      <path d="M5 3h10v14H5zM8 7h4M8 10h4M8 13h2" />
+    </>
+  ),
   arrow: <path d="M5 10h10M11 6l4 4-4 4" />,
   collapse: <path d="M12 5l-5 5 5 5M16 5v10" />,
   expand: <path d="M8 5l5 5-5 5M4 5v10" />,

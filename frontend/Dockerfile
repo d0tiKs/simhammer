@@ -10,6 +10,8 @@ COPY . .
 # Kept below `npm ci` so changing the API URL doesn't invalidate the dependency layer
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG BUILD_COMMIT
+ENV BUILD_COMMIT=$BUILD_COMMIT
 RUN npm run build
 
 FROM node:20-alpine AS runner

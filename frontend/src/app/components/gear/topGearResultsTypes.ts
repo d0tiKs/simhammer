@@ -29,6 +29,7 @@ export interface TopGearResult {
 
 export interface TopGearResultsProps {
   allowRefinement?: boolean;
+  useEquippedBaseline?: boolean;
   refinement?: import('./RefineRankings').RefinementInfo;
   playerName: string;
   playerClass: string;

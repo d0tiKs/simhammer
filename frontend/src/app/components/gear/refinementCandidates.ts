@@ -24,7 +24,8 @@ export function refinementCandidates(
   target: number | undefined,
   margin: number,
   mode: 'probability' | 'auto' | 'custom' = 'custom',
-  minProbability = 20
+  minProbability = 20,
+  useEquippedBaseline = false
 ): TopGearResult[] | null {
   if (!target || target <= 0 || !Number.isFinite(margin) || margin < 0 || margin > 10) return null;
   if (!Number.isFinite(minProbability) || minProbability < 0 || minProbability > 100) return null;
@@ -32,8 +33,11 @@ export function refinementCandidates(
     row.precision_pct != null && row.precision_pct <= target + 0.005;
   const preciseRows = results.filter(precise);
   if (!preciseRows.length) return null;
-  const best = Math.max(...preciseRows.map((row) => row.dps));
-  const reference = results.find((row) => precise(row) && row.dps === best)!;
+  const reference = useEquippedBaseline
+    ? preciseRows.find((row) => row.name.startsWith('Currently Equipped'))
+    : preciseRows.reduce((best, row) => (row.dps > best.dps ? row : best));
+  if (!reference) return null;
+  const best = reference.dps;
   const lower = best * (1 - (reference.precision_pct ?? 0) / 100);
   const cutoff = best * (1 - margin / 100);
   return results.filter(

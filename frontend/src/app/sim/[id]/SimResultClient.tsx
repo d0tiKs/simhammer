@@ -431,15 +431,12 @@ export default function SimResultClient() {
           ) : undefined
         }
         actions={
-          <div className="flex flex-col items-end gap-2">
-            <ShareButton
-              jobId={id}
-              result={r}
-              shareId={job.share_id ?? null}
-              onChange={(shareId) => setJob((cur) => (cur ? { ...cur, share_id: shareId } : cur))}
-            />
-            <CopySimcInputButton jobId={id} />
-          </div>
+          <ShareButton
+            jobId={id}
+            result={r}
+            shareId={job.share_id ?? null}
+            onChange={(shareId) => setJob((cur) => (cur ? { ...cur, share_id: shareId } : cur))}
+          />
         }
       />
 

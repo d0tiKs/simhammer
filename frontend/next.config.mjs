@@ -1,4 +1,21 @@
 import path from 'path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+// Resolve once at build time, so deployed clients identify the bundled code.
+let buildCommit = process.env.BUILD_COMMIT || process.env.GITHUB_SHA || '';
+if (!buildCommit) {
+  try {
+    buildCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: path.dirname(fileURLToPath(import.meta.url)),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    // Source archives and Docker contexts may not contain Git metadata.
+  }
+}
+buildCommit = /^[a-f0-9]{40,64}$/i.test(buildCommit) ? buildCommit : '';
 
 // VIEWER_BUILD=1: static share viewer served by simhammer.com under /viewer.
 const viewer = !!process.env.VIEWER_BUILD;
@@ -10,6 +27,7 @@ const nextConfig = {
   ...(viewer ? { basePath: "/viewer" } : {}),
   outputFileTracingRoot: path.join(process.cwd(), '..'),
   env: {
+    NEXT_PUBLIC_BUILD_COMMIT: buildCommit,
     NEXT_PUBLIC_API_URL: viewer ? "" : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"),
     NEXT_PUBLIC_VIEWER_BUILD: viewer ? "1" : "",
   },

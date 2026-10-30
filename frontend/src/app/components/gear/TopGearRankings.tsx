@@ -19,6 +19,7 @@ const VISIBLE_STEP = 50;
 
 interface TopGearRankingsProps {
   allowRefinement?: boolean;
+  useEquippedBaseline?: boolean;
   refinement?: RefinementInfo;
   results: TopGearResult[];
   equippedGear?: Record<string, ResultItem>;
@@ -42,6 +43,7 @@ interface TopGearRankingsProps {
 
 export default function TopGearRankings({
   allowRefinement,
+  useEquippedBaseline,
   results,
   refinement,
   equippedGear,
@@ -91,6 +93,7 @@ export default function TopGearRankings({
 
       {allowRefinement && (
         <RefineRankings
+          useEquippedBaseline={useEquippedBaseline}
           sourceJobId={sourceJobId}
           results={results}
           targetError={targetError}

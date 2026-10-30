@@ -1,0 +1,14 @@
+[
+  {
+    "version": "5.1.2",
+    "date": "2026-10-28",
+    "changes": [
+      "Copy the saved SimC input directly from run reports and the input panel.",
+      "Fetch exact Armory stats when server-side Blizzard credentials are configured.",
+      "Preserve equipped item stats through gear comparisons.",
+      "Give scenario groups separate cards and clearer headers.",
+      "Keep run settings in place when expanding details and improve the Sims library layout.",
+      "Show larger character models in result headers."
+    ]
+  }
+]

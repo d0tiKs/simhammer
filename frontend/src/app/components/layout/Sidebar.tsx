@@ -222,6 +222,13 @@ export default function Sidebar() {
           pathname={pathname}
           collapsed={collapsed}
         />
+        <NavItem
+          href={ROUTES.changelog}
+          label={t('nav.changelog')}
+          icon="changelog"
+          pathname={pathname}
+          collapsed={collapsed}
+        />
       </nav>
 
       <div className="mt-auto flex shrink-0 flex-col gap-1 border-t border-line/[0.06] py-2.5">

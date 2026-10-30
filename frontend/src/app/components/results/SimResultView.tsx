@@ -57,7 +57,7 @@ export default function SimResultView({
 
   const headerActions =
     backLink || actions ? (
-      <div className="flex max-w-[70vw] flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {backLink}
         {actions}
       </div>
@@ -71,6 +71,7 @@ export default function SimResultView({
   return isGearComparisonResult(result) ? (
     <>
       <TopGearResults
+        useEquippedBaseline={result.type === 'droptimizer'}
         allowRefinement={['top_gear', 'droptimizer', 'upgrade_compare'].includes(result.type)}
         refinement={result.refinement}
         playerName={result.player_name}
@@ -99,6 +100,7 @@ export default function SimResultView({
         playerRealm={result.realm}
         playerRegion={result.region}
         dps={result.dps}
+        fightStyle={result.setup?.fight_style}
         fightLength={result.fight_length}
         desiredTargets={result.desired_targets}
         iterations={result.iterations}
