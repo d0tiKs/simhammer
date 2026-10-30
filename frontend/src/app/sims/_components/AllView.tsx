@@ -75,9 +75,14 @@ export function AllView({
           {group.label && (
             <h2 className="-mx-4 border-b border-line/[0.1] bg-surface-container-high/60 px-4 py-2.5 text-sm font-semibold text-gold sm:-mx-6 sm:px-6">
               {group.label} <span className="font-normal text-outline">({group.jobs.length})</span>
-              {scenarioDifferences(group.jobs[0], jobs) && (
-                <span className="mt-1 block text-xs font-normal text-outline">
-                  {scenarioDifferences(group.jobs[0], jobs)}
+              {(group.jobs[0].scenario?.simc_revision || scenarioDifferences(group.jobs[0], jobs)) && (
+                <span className="mt-1 block break-words text-xs font-normal text-outline">
+                  {[
+                    group.jobs[0].scenario?.simc_revision
+                      ? `SimC branch: ${group.jobs[0].scenario.settings.simc_branch || 'Not recorded'} · Commit: ${group.jobs[0].scenario.simc_revision}`
+                      : '',
+                    scenarioDifferences(group.jobs[0], jobs),
+                  ].filter(Boolean).join(' · ')}
                 </span>
               )}
             </h2>
@@ -122,6 +127,11 @@ export function AllView({
                             : ''}
                         </span>
                         <span className="text-outline">{rotationLabel(scenario?.rotation)}</span>
+                        {scenario?.simc_revision && (
+                          <span className="break-all text-outline">
+                            SimC branch: {String(scenario.settings.simc_branch || 'Not recorded')} · Commit: {scenario.simc_revision}
+                          </span>
+                        )}
                       </div>
                     )}
                     {job.error_message && (

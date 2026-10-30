@@ -38,3 +38,12 @@ test('large environment differences produce short summaries without raw override
  assert.equal(scenarioDifferences(a,[a,b]),'2 buffs on · 3 consumables on');
  assert.equal(scenarioDifferences(b,[a,b]),'0 buffs on · 2 off · Consumables off');
 });
+
+test('revision remains available without a branch and does not consume difference summary space',()=>{
+ const {scenarioDifferences}=require('../src/app/lib/runLibrary.ts');
+ const a=job('a',{simc_revision:'3ca15de'});
+ const b=job('b',{simc_revision:'6a4500d',settings:{simc_branch:'nightly'}});
+ assert.notEqual(scenarioKey(a),scenarioKey(b));
+ assert.equal(scenarioDifferences(a,[a,b]),'');
+
+});

@@ -93,12 +93,11 @@ export function scenarioDifferences(job: JobOverviewSummary, peers: JobOverviewS
   const flatten = (j: JobOverviewSummary) => {
     const entries: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(j.scenario?.settings ?? {})) {
-      if (value == null || value === '') continue;
+      if (value == null || value === '' || (key === 'simc_branch' && j.scenario?.simc_revision)) continue;
       if ((key === 'consumables' || key === 'raid_buffs') && value && typeof value === 'object') {
         for (const [part, detail] of Object.entries(value)) entries[part] = detail;
       } else entries[key] = value;
     }
-    entries['SimC revision'] = j.scenario?.simc_revision;
     return entries;
   };
   const sameLabel = peers.filter((j) => scenarioLabel(j) === scenarioLabel(job));
