@@ -1,0 +1,8 @@
+## Interface: 120100, 120105
+## Title: Simhammer Acquired
+## Notes: Records when each piece of gear was first seen and adds the dates to the SimulationCraft export
+## Version: 0.1.0
+## OptionalDependencies: Simulationcraft
+## SavedVariables: SimhammerAcquiredDB
+
+SimhammerAcquired.lua
