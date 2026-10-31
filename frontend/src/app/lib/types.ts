@@ -35,6 +35,8 @@ export interface ResolvedItem {
   /** Game data leaves the sim nothing to value (no stats, no on-use), so it sims at zero. */
   no_sim_value?: boolean;
   is_manual?: boolean;
+  /** Unix seconds the SimhammerAcquired addon first saw this item. */
+  acquired_at?: number;
   embellishment?: { id: number; name: string; bonus_ids: number[] };
 }
 

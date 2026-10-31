@@ -32,6 +32,8 @@ static RE_UPGRADE_CURRENCIES_LINE: Lazy<Regex> =
 static RE_CURRENCY_PAIR: Lazy<Regex> = Lazy::new(|| Regex::new(r"c:(\d+):(\d+)").unwrap());
 static RE_CATALYST_LINE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^#?\s*catalyst_currencies\s*=\s*(.+)$").unwrap());
+static RE_ACQUIRED_LINE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^simhammer_acquired=(.*)$").unwrap());
 
 struct ItemProps {
     item_id: u64,
@@ -106,12 +108,19 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
     let mut in_vault_section = false;
     let mut in_loot_section = false;
     let mut pending_label = String::new();
+    let mut acquired: HashMap<(u64, Vec<u64>), u64> = HashMap::new();
 
     for raw_line in simc_input.lines() {
         let stripped = raw_line.trim();
 
         if stripped.starts_with('#') {
             let clean = stripped.trim_start_matches('#').trim();
+
+            // SimhammerAcquired addon: `itemID:bonus/bonus@unixtime,...`
+            if let Some(caps) = RE_ACQUIRED_LINE.captures(clean) {
+                acquired.extend(caps[1].split(',').filter_map(parse_acquired_entry));
+                continue;
+            }
 
             // Vault section boundaries
             if clean.eq_ignore_ascii_case("Weekly Reward Choices") {
@@ -176,6 +185,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     origin: ItemOrigin::Bags,
                     manual: true,
                     source_item_id: props.source_item_id,
+                    acquired_at: 0,
                 });
                 continue;
             }
@@ -215,6 +225,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     origin,
                     manual: false,
                     source_item_id: props.source_item_id,
+                    acquired_at: 0,
                 });
             } else if let Some(caps) = header_re.captures(stripped) {
                 pending_name = caps[1].to_string();
@@ -282,6 +293,7 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
                     origin: ItemOrigin::Equipped,
                     manual: false,
                     source_item_id: props.source_item_id,
+                    acquired_at: 0,
                 });
             }
             pending_label.clear();
@@ -292,12 +304,29 @@ pub fn parse_simc_input(simc_input: &str) -> ParseResult {
         }
     }
 
+    for item in &mut items {
+        let mut bonus_ids = item.bonus_ids.clone();
+        bonus_ids.sort_unstable();
+        if let Some(&at) = acquired.get(&(item.item_id, bonus_ids)) {
+            item.acquired_at = at;
+        }
+    }
+
     ParseResult {
         items,
         character,
         base_profile: base_profile_lines.join("\n"),
         talent_loadouts,
     }
+}
+
+/// One `itemID:bonus/bonus@unixtime` entry, keyed with sorted bonus IDs.
+fn parse_acquired_entry(entry: &str) -> Option<((u64, Vec<u64>), u64)> {
+    let (key, at) = entry.trim().split_once('@')?;
+    let (item_id, bonus) = key.split_once(':')?;
+    let mut bonus_ids: Vec<u64> = bonus.split('/').filter_map(|b| b.parse().ok()).collect();
+    bonus_ids.sort_unstable();
+    Some(((item_id.parse().ok()?, bonus_ids), at.parse().ok()?))
 }
 
 /// Extract upgrade currency budget from a SimC addon string.
@@ -367,6 +396,28 @@ mod tests {
             .expect("head item parsed");
         assert!(head.name.is_empty(), "got {:?}", head.name);
         assert_eq!(head.ilevel, 0);
+    }
+
+    #[test]
+    fn acquired_times_attach_to_matching_items_regardless_of_bonus_order() {
+        let input = concat!(
+            "mage=\"Jaina\"\n",
+            "head=,id=212067,bonus_id=10299/1540/6652\n",
+            "# finger1=,id=228411,bonus_id=1\n",
+            "# Checksum: 1a2b\n",
+            "# simhammer_acquired=212067:1540/6652/10299@1730300000,999:@5\n",
+        );
+        let parsed = parse_simc_input(input);
+        let at = |slot: &str| {
+            parsed
+                .items
+                .iter()
+                .find(|i| i.raw_slot == slot)
+                .unwrap()
+                .acquired_at
+        };
+        assert_eq!(at("head"), 1730300000);
+        assert_eq!(at("finger1"), 0);
     }
 
     #[test]

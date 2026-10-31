@@ -297,6 +297,10 @@ export default function TopGearItemSelector({
           : item.enchant_name;
         parts.push({ text: enchantName, color: 'text-ench' });
       }
+      if (item.acquired_at) {
+        const date = new Date(item.acquired_at * 1000).toLocaleDateString(locale.replace('_', '-'));
+        parts.push({ text: t('gear.acquired', { date }) });
+      }
       return parts;
     },
     [locale, t, addedKeys, baselineKeys]

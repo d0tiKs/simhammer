@@ -205,6 +205,7 @@ fn enrich(item: &RawParsedItem, slot: &str) -> ResolvedItem {
         is_void_forge: false,
         can_void_forge: false,
         no_sim_value: crate::item_db::has_no_sim_value(item.item_id),
+        acquired_at: item.acquired_at,
     }
 }
 
@@ -588,6 +589,7 @@ pub fn build_catalyst_item(
         is_void_forge: false,
         can_void_forge: false,
         no_sim_value: crate::item_db::has_no_sim_value(tier_item_id),
+        acquired_at: 0,
     }
 }
 

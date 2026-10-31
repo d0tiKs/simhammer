@@ -231,6 +231,7 @@
   "gear.vault": "Vault",
   "gear.catalyst": "Catalyst",
   "gear.greatVault": "Great Vault",
+  "gear.acquired": "Acquired {date}",
   "gear.convertToCatalyst": "Convert to Catalyst",
   "gear.convertToVoidForge": "Convert to Void Forge",
   "gear.addSocket": "Add Socket",

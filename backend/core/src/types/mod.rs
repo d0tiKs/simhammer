@@ -56,6 +56,9 @@ pub struct RawParsedItem {
     /// Item this was catalysed from (parsed from `redirected_base_stats=<id>`).
     #[serde(default)]
     pub source_item_id: u64,
+    /// Unix time the SimhammerAcquired addon first saw this item (0 if unknown).
+    #[serde(default)]
+    pub acquired_at: u64,
 }
 
 // ---- Character Info ----
@@ -207,6 +210,9 @@ pub struct ResolvedItem {
     /// Whether the game data leaves the sim nothing to value, so it sims at zero.
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub no_sim_value: bool,
+    /// Unix time the SimhammerAcquired addon first saw this item (0 if unknown).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub acquired_at: u64,
 }
 
 fn is_zero(v: &u64) -> bool {
