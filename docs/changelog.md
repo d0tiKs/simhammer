@@ -1,6 +1,8 @@
 # Changelog and build identity
 
-The Changelog tab shows release notes from `frontend/src/data/changelog.json`, newest first. Add a version, ISO date, and a list of user-facing changes when preparing a release. The installed version comes from `frontend/package.json`.
+The Changelog tab shows release notes from `frontend/src/data/changelog.json`, newest first, grouped by version. The installed version comes from `frontend/package.json`.
+
+Update the changelog in the same commit as any significant user-facing change. Unreleased changes go in an entry at the top whose version is the next release with a `-dev` suffix (for example `5.2.0-dev`); set its date to the latest change. When preparing a release, drop the suffix, set the release date, and bump the version.
 
 The commit hash is embedded at frontend build time, so it identifies the bundled UI. Local and desktop builds read Git HEAD automatically. CI can supply `BUILD_COMMIT` or `GITHUB_SHA`. Published standalone images receive the exact workflow commit through the Docker build argument `BUILD_COMMIT`.
 
