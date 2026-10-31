@@ -5,6 +5,7 @@ const {
   buildVisibleGroups,
   partitionByAlternatives,
   pickEquippedReplacements,
+  sortByAcquired,
   unchangedSlotCount,
 } = require('../src/app/components/gear/topGearSelection.ts');
 const { gearGridColumns } = require('../src/app/components/gear/gearDensity.ts');
@@ -203,7 +204,6 @@ test('same tier item with different retained stats keeps a distinct identity aft
   assert.equal(first.simc_string, item.simc_string);
 });
 
-
 test('buildResolvedCopy keeps the source segment on owned catalysed gear', () => {
   const owned = {
     uid: '250042::equipped:head:249629',
@@ -246,13 +246,27 @@ const {
 } = require('../src/app/components/gear/topGearResultsUtils.ts');
 
 test('Wowhead tooltip uses a combination’s enchant and all socket gems', () => {
-  const equipped = { finger1: { slot: 'finger1', item_id: 10, ilevel: 300, name: 'Ring', enchant_id: 1, gem_ids: [21, 22] } };
-  const result = { name: 'Combo 1', dps: 100, delta: 1, items: [
-    { ...equipped.finger1, is_kept: true },
-    { slot: 'finger1', type: 'enchant', enchant_id: 7 },
-    { slot: 'finger1', type: 'gem', gem_id: 31 },
-    { slot: 'finger1', type: 'gem', gem_id: 32 },
-  ] };
+  const equipped = {
+    finger1: {
+      slot: 'finger1',
+      item_id: 10,
+      ilevel: 300,
+      name: 'Ring',
+      enchant_id: 1,
+      gem_ids: [21, 22],
+    },
+  };
+  const result = {
+    name: 'Combo 1',
+    dps: 100,
+    delta: 1,
+    items: [
+      { ...equipped.finger1, is_kept: true },
+      { slot: 'finger1', type: 'enchant', enchant_id: 7 },
+      { slot: 'finger1', type: 'gem', gem_id: 31 },
+      { slot: 'finger1', type: 'gem', gem_id: 32 },
+    ],
+  };
   const item = buildBestGearSet(equipped, result).finger1;
   const params = new URLSearchParams(getWowheadData(item));
   assert.equal(params.get('ench'), '7');
@@ -691,10 +705,23 @@ test('refinement counts rough contenders and widens the cutoff without rerunning
     { name: 'Combo 3', dps: 107, precision_pct: 2 },
     { name: 'Currently Equipped', dps: 100, precision_pct: 0.1 },
   ];
-  assert.deepEqual(refinementCandidates(rows, 0.1, 0).map(r => r.name), ['Combo 1']);
-  assert.deepEqual(refinementCandidates(rows, 0.1, 1).map(r => r.name), ['Combo 1', 'Combo 3']);
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 0).map((r) => r.name),
+    ['Combo 1']
+  );
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 1).map((r) => r.name),
+    ['Combo 1', 'Combo 3']
+  );
   assert.equal(refinementCandidates(rows, undefined, 0), null);
-  assert.equal(refinementCandidates(rows.filter(r => r.precision_pct > 0.1), 0.1, 0), null);
+  assert.equal(
+    refinementCandidates(
+      rows.filter((r) => r.precision_pct > 0.1),
+      0.1,
+      0
+    ),
+    null
+  );
 });
 
 test('automatic refinement uses both error ranges and includes unknown precision', () => {
@@ -706,8 +733,14 @@ test('automatic refinement uses both error ranges and includes unknown precision
     { name: 'Combo 5', dps: 107.8, precision_pct: 0.11 },
     { name: 'Combo 6', dps: 90 },
   ];
-  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'auto').map(r => r.name), ['Combo 1', 'Combo 3', 'Combo 5', 'Combo 6']);
-  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'custom').map(r => r.name), ['Combo 1']);
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 0, 'auto').map((r) => r.name),
+    ['Combo 1', 'Combo 3', 'Combo 5', 'Combo 6']
+  );
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 0, 'custom').map((r) => r.name),
+    ['Combo 1']
+  );
 });
 
 test('probability threshold defaults to 20 percent and updates candidate counts', () => {
@@ -719,8 +752,14 @@ test('probability threshold defaults to 20 percent and updates candidate counts'
     { name: 'Combo 4', dps: 100, precision_pct: 1 },
     { name: 'Combo 5', dps: 90 },
   ];
-  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'probability').map(r => r.name), ['Combo 1', 'Combo 3']);
-  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'probability', 50).map(r => r.name), ['Combo 1']);
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 0, 'probability').map((r) => r.name),
+    ['Combo 1', 'Combo 3']
+  );
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 0, 'probability', 50).map((r) => r.name),
+    ['Combo 1']
+  );
   assert.equal(refinementCandidates(rows, 0.1, 0, 'probability', 101), null);
   assert.ok(Math.abs(improvementProbability(100, 1, 100, 1) - 0.5) < 1e-7);
   assert.equal(improvementProbability(100, 0, 100, 0), 0.5);
@@ -733,7 +772,26 @@ test('Drop Finder refinement compares rough upgrades with equipped gear', () => 
     { name: 'Combo 2', dps: 108, precision_pct: 0.1 },
     { name: 'Combo 3', dps: 107, precision_pct: 2 },
   ];
-  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'custom', 20, true).map(r => r.name), ['Combo 1', 'Combo 3']);
-  assert.deepEqual(refinementCandidates(rows, 0.1, 0, 'custom').map(r => r.name), ['Combo 1']);
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 0, 'custom', 20, true).map((r) => r.name),
+    ['Combo 1', 'Combo 3']
+  );
+  assert.deepEqual(
+    refinementCandidates(rows, 0.1, 0, 'custom').map((r) => r.name),
+    ['Combo 1']
+  );
   assert.equal(refinementCandidates(rows.slice(1), 0.1, 0, 'custom', 20, true), null);
+});
+
+test('sorting by acquisition puts the newest first and undated items last in their order', () => {
+  const items = [
+    { uid: 'undated-high', ilevel: 720 },
+    { uid: 'old', ilevel: 710, acquired_at: 100 },
+    { uid: 'undated-low', ilevel: 700 },
+    { uid: 'new', ilevel: 690, acquired_at: 200 },
+  ];
+  assert.deepEqual(
+    sortByAcquired(items).map((item) => item.uid),
+    ['new', 'old', 'undated-high', 'undated-low']
+  );
 });

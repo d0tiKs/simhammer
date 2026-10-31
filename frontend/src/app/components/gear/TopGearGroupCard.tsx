@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ResolvedItem } from '../../lib/types';
 import { usePopupDismissal } from '../loot/usePopupDismissal';
 import { getWowheadData, getWowheadUrl, localizedItemName } from '../../lib/useItemInfo';
@@ -14,7 +14,7 @@ import {
 } from './gearDensity';
 import { ENCHANT_SLOTS } from './itemOptions';
 import { buildAlternativeKey } from './topGearIdentity';
-import type { DisplayGroup } from './topGearSelection';
+import { sortByAcquired, type DisplayGroup } from './topGearSelection';
 
 interface UpgradeOption {
   bonus_id: number;
@@ -112,6 +112,9 @@ export default function TopGearGroupCard({
   t,
 }: TopGearGroupCardProps) {
   const layout = GEAR_DENSITY_LAYOUT[density];
+  const [byAcquired, setByAcquired] = useState(false);
+  const hasAcquired = alternatives.some((item) => item.acquired_at);
+  const shownAlternatives = byAcquired && hasAcquired ? sortByAcquired(alternatives) : alternatives;
   const picked = alternatives.filter((item) => isItemSelected(item, group)).length;
   // An alternative is an upgrade over the item it would replace; for a pair
   // (rings, trinkets) that is the weaker of the two equipped.
@@ -141,13 +144,37 @@ export default function TopGearGroupCard({
             <Pill className="tabular-nums text-outline">{alternatives.length}</Pill>
           )
         )}
+        {hasAcquired && (
+          <button
+            type="button"
+            onClick={() => setByAcquired(!byAcquired)}
+            aria-pressed={byAcquired}
+            title={t(byAcquired ? 'topGear.sortByIlevel' : 'topGear.sortByAcquired')}
+            aria-label={t(byAcquired ? 'topGear.sortByIlevel' : 'topGear.sortByAcquired')}
+            className={`ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] transition-colors hover:bg-overlay/[0.06] ${
+              byAcquired ? 'text-gold' : 'text-outline hover:text-on-surface-variant'
+            }`}
+          >
+            <svg
+              className="h-3 w-3"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            >
+              <circle cx="8" cy="8" r="6" />
+              <path d="M8 4.5V8l2.5 1.5" />
+            </svg>
+          </button>
+        )}
         {onDemote && (
           <button
             type="button"
             onClick={onDemote}
             title={t('topGear.collapseSlot')}
             aria-label={t('topGear.collapseSlot')}
-            className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-outline transition-colors hover:bg-overlay/[0.06] hover:text-on-surface-variant"
+            className={`${hasAcquired ? '' : 'ml-auto'}flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-outline transition-colors hover:bg-overlay/[0.06] hover:text-on-surface-variant`}
           >
             <svg
               className="h-2.5 w-2.5"
@@ -225,7 +252,7 @@ export default function TopGearGroupCard({
         <div className={`border-t border-line/[0.06] ${layout.rule}`} />
       )}
 
-      {alternatives.map((item, index) => (
+      {shownAlternatives.map((item, index) => (
         <GearItemRow
           key={`alt-${item.uid}-${index}`}
           icon={item.icon}

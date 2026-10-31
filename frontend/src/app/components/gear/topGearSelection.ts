@@ -148,6 +148,12 @@ export function buildVisibleGroups(resolved: ResolveGearResponse): VisibleGroup[
   return result;
 }
 
+/** Newest-acquired first; items without an acquisition date keep their
+ *  existing (item level) order after the dated ones. */
+export function sortByAcquired(items: ResolvedItem[]): ResolvedItem[] {
+  return [...items].sort((a, b) => (b.acquired_at ?? 0) - (a.acquired_at ?? 0));
+}
+
 /** Split visible groups into the ones worth a card and the ones with nothing to
  *  choose. `promoted` holds labels the user opened from the unchanged strip, so
  *  they keep a card (and its per-item menu, the only way to create alternatives). */

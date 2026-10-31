@@ -461,6 +461,8 @@
   "topGear.combinations": "Combinations",
   "topGear.pickAnyTwo": "pick any two",
   "topGear.equippedTag": "Equipped",
+  "topGear.sortByAcquired": "Sort by acquisition date",
+  "topGear.sortByIlevel": "Sort by item level",
   "gear.itemActions": "Upgrade, catalyst, socket and gem options",
   "dropFinder.selectRaid": "Select Raid",
   "dropFinder.difficulty": "Difficulty",

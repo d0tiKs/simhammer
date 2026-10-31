@@ -4,7 +4,8 @@
     "date": "2026-10-31",
     "changes": [
       "Add the SimhammerAcquired addon, which records when each piece of gear was first seen and adds the dates to the SimC export with /shammer.",
-      "Show when each item was acquired in the Top Gear item list."
+      "Show when each item was acquired in the Top Gear item list.",
+      "Sort each Top Gear slot's alternatives by acquisition date, with the equipped item kept on top."
     ]
   },
   {
